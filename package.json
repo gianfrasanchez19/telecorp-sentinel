@@ -1,0 +1,27 @@
+{
+  "name": "telecorp-sentinel",
+  "private": true,
+  "version": "0.1.0",
+  "description": "TeleCorp Sentinel — monitoreo de antenas, reportes ciudadanos e incidentes (Hackathon Cloud Computing UTEC 2026-2, Grupo 60)",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run dev:api & npm run dev:web",
+    "dev:api": "npm run dev -w backend",
+    "dev:web": "npm run dev -w frontend",
+    "seed": "npm run seed -w backend",
+    "demo": "npm run demo -w backend",
+    "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend",
+    "lint": "npm run lint -w backend && npm run lint -w frontend",
+    "test": "npm run test -w backend",
+    "build": "npm run build -w backend && npm run build -w frontend",
+    "load:local": "npm run load -w backend",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "type": "module"
+}

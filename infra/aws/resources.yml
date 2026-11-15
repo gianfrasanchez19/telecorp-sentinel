@@ -1,0 +1,318 @@
+# Recursos CloudFormation de TeleCorp Sentinel (incluidos desde backend/serverless.yml).
+# Nota: no se usa la sintaxis ${Recurso.Atributo} de Fn::Sub para no chocar con las
+# variables de Serverless; se usan Fn::Join / Fn::GetAtt.
+
+# ---------------- Persistencia: DynamoDB (tabla única) ----------------
+SentinelTable:
+  Type: AWS::DynamoDB::Table
+  DeletionPolicy: Retain
+  UpdateReplacePolicy: Retain
+  Properties:
+    TableName: ${self:service}-${sls:stage}
+    BillingMode: PAY_PER_REQUEST # on-demand; réplica automática en 3 zonas de disponibilidad de la región
+    AttributeDefinitions:
+      - { AttributeName: pk, AttributeType: S }
+      - { AttributeName: sk, AttributeType: S }
+      - { AttributeName: gsi1pk, AttributeType: S }
+      - { AttributeName: gsi1sk, AttributeType: S }
+      - { AttributeName: gsi2pk, AttributeType: S }
+      - { AttributeName: gsi2sk, AttributeType: S }
+    KeySchema:
+      - { AttributeName: pk, KeyType: HASH }
+      - { AttributeName: sk, KeyType: RANGE }
+    GlobalSecondaryIndexes:
+      - IndexName: gsi1
+        KeySchema: [{ AttributeName: gsi1pk, KeyType: HASH }, { AttributeName: gsi1sk, KeyType: RANGE }]
+        Projection: { ProjectionType: ALL }
+      - IndexName: gsi2
+        KeySchema: [{ AttributeName: gsi2pk, KeyType: HASH }, { AttributeName: gsi2sk, KeyType: RANGE }]
+        Projection: { ProjectionType: ALL }
+    StreamSpecification:
+      StreamViewType: NEW_AND_OLD_IMAGES
+    TimeToLiveSpecification:
+      AttributeName: ttl # sólo datos temporales (idempotencia, outbox publicado, rate limit, métricas crudas 30 d)
+      Enabled: true
+    PointInTimeRecoverySpecification:
+      PointInTimeRecoveryEnabled: !If [UsePitr, true, false]
+    SSESpecification:
+      SSEEnabled: true
+    DeletionProtectionEnabled: ${param:deletionProtection}
+
+# ---------------- Secretos: AWS Secrets Manager ----------------
+AppSecret:
+  Type: AWS::SecretsManager::Secret
+  Properties:
+    Name: telecorp-sentinel/${sls:stage}/app
+    Description: Clave maestra (HKDF) para JWT, seudonimización HMAC, cifrado de PII y firma IA. Generada por AWS; nunca en git.
+    GenerateSecretString:
+      SecretStringTemplate: '{"v":1}'
+      GenerateStringKey: master
+      PasswordLength: 64
+      ExcludePunctuation: true
+
+# ---------------- Colas SQS + DLQ ----------------
+EventsDLQ:
+  Type: AWS::SQS::Queue
+  Properties:
+    QueueName: ${self:service}-${sls:stage}-events-dlq
+    MessageRetentionPeriod: 1209600
+    SqsManagedSseEnabled: true
+EventsQueue:
+  Type: AWS::SQS::Queue
+  Properties:
+    QueueName: ${self:service}-${sls:stage}-events
+    VisibilityTimeout: 180 # >= 6 x timeout del consumidor
+    MessageRetentionPeriod: 345600
+    SqsManagedSseEnabled: true
+    RedrivePolicy:
+      deadLetterTargetArn: !GetAtt EventsDLQ.Arn
+      maxReceiveCount: 5
+NotificationsDLQ:
+  Type: AWS::SQS::Queue
+  Properties:
+    QueueName: ${self:service}-${sls:stage}-notifications-dlq
+    MessageRetentionPeriod: 1209600
+    SqsManagedSseEnabled: true
+NotificationsQueue:
+  Type: AWS::SQS::Queue
+  Properties:
+    QueueName: ${self:service}-${sls:stage}-notifications
+    VisibilityTimeout: 180
+    SqsManagedSseEnabled: true
+    RedrivePolicy:
+      deadLetterTargetArn: !GetAtt NotificationsDLQ.Arn
+      maxReceiveCount: 4
+StreamFailuresDLQ:
+  Type: AWS::SQS::Queue
+  Properties:
+    QueueName: ${self:service}-${sls:stage}-stream-failures
+    MessageRetentionPeriod: 1209600
+    SqsManagedSseEnabled: true
+
+# ---------------- Orquestación: Step Functions Standard ----------------
+WorkflowLogGroup:
+  Type: AWS::Logs::LogGroup
+  Properties:
+    LogGroupName: /aws/vendedlogs/states/${self:service}-${sls:stage}-incident-workflow
+    RetentionInDays: 14
+IncidentWorkflow:
+  Type: AWS::StepFunctions::StateMachine
+  Properties:
+    StateMachineName: ${self:service}-${sls:stage}-incident-workflow
+    StateMachineType: STANDARD
+    RoleArn: ${param:labRoleArn}
+    DefinitionString: ${file(./dist/statemachine-definition.json)}
+    LoggingConfiguration:
+      Level: ERROR
+      IncludeExecutionData: false # no volcar payloads (pueden contener referencias) en logs
+      Destinations:
+        - CloudWatchLogsLogGroup:
+            LogGroupArn: !GetAtt WorkflowLogGroup.Arn
+    TracingConfiguration:
+      Enabled: !If [TracingOn, true, false]
+
+# ---------------- Simulador programado ----------------
+# Opción A (por defecto, enseñada en S14): regla programada de EventBridge.
+SimulatorRule:
+  Type: AWS::Events::Rule
+  Condition: UseEventRule
+  Properties:
+    Name: ${self:service}-${sls:stage}-simulator
+    Description: Telemetría sintética cada minuto (apagable con simulatorEnabled=false)
+    ScheduleExpression: rate(1 minute)
+    State: !If [SimulatorOn, ENABLED, DISABLED]
+    Targets:
+      - Id: simulator
+        Arn: !GetAtt SimulatorLambdaFunction.Arn
+SimulatorRulePermission:
+  Type: AWS::Lambda::Permission
+  Condition: UseEventRule
+  Properties:
+    Action: lambda:InvokeFunction
+    FunctionName: !Ref SimulatorLambdaFunction
+    Principal: events.amazonaws.com
+    SourceArn: !GetAtt SimulatorRule.Arn
+# Opción B: EventBridge Scheduler (requiere rol asumible por scheduler.amazonaws.com; en Academy LabRole).
+SimulatorSchedule:
+  Type: AWS::Scheduler::Schedule
+  Condition: UseScheduler
+  Properties:
+    Name: ${self:service}-${sls:stage}-simulator
+    ScheduleExpression: rate(1 minute)
+    FlexibleTimeWindow: { Mode: 'OFF' }
+    State: !If [SimulatorOn, ENABLED, DISABLED]
+    Target:
+      Arn: !GetAtt SimulatorLambdaFunction.Arn
+      RoleArn: ${param:labRoleArn}
+      RetryPolicy: { MaximumRetryAttempts: 1, MaximumEventAgeInSeconds: 60 }
+
+# ---------------- Observabilidad: alarmas CloudWatch ----------------
+AlertsTopic:
+  Type: AWS::SNS::Topic
+  Properties:
+    TopicName: ${self:service}-${sls:stage}-alerts
+AlertsEmailSubscription:
+  Type: AWS::SNS::Subscription
+  Condition: HasAlertEmail
+  Properties:
+    TopicArn: !Ref AlertsTopic
+    Protocol: email
+    Endpoint: ${param:alertEmail}
+EventsDLQAlarm:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: ${self:service}-${sls:stage}-events-dlq-not-empty
+    AlarmDescription: Hay eventos en la DLQ de eventos (revisar y re-procesar)
+    Namespace: AWS/SQS
+    MetricName: ApproximateNumberOfMessagesVisible
+    Dimensions: [{ Name: QueueName, Value: !GetAtt EventsDLQ.QueueName }]
+    Statistic: Maximum
+    Period: 60
+    EvaluationPeriods: 1
+    Threshold: 0
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions: [!Ref AlertsTopic]
+NotificationsDLQAlarm:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: ${self:service}-${sls:stage}-notifications-dlq-not-empty
+    Namespace: AWS/SQS
+    MetricName: ApproximateNumberOfMessagesVisible
+    Dimensions: [{ Name: QueueName, Value: !GetAtt NotificationsDLQ.QueueName }]
+    Statistic: Maximum
+    Period: 60
+    EvaluationPeriods: 1
+    Threshold: 0
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions: [!Ref AlertsTopic]
+StreamFailuresAlarm:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: ${self:service}-${sls:stage}-stream-failures
+    Namespace: AWS/SQS
+    MetricName: ApproximateNumberOfMessagesVisible
+    Dimensions: [{ Name: QueueName, Value: !GetAtt StreamFailuresDLQ.QueueName }]
+    Statistic: Maximum
+    Period: 60
+    EvaluationPeriods: 1
+    Threshold: 0
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions: [!Ref AlertsTopic]
+WorkflowFailedAlarm:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: ${self:service}-${sls:stage}-workflow-failed
+    AlarmDescription: Ejecuciones fallidas de Step Functions (usar replay específico desde el Laboratorio)
+    Namespace: AWS/States
+    MetricName: ExecutionsFailed
+    Dimensions: [{ Name: StateMachineArn, Value: !Ref IncidentWorkflow }]
+    Statistic: Sum
+    Period: 300
+    EvaluationPeriods: 1
+    Threshold: 0
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions: [!Ref AlertsTopic]
+ApiErrorsAlarm:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: ${self:service}-${sls:stage}-api-5xx
+    Namespace: AWS/ApiGateway
+    MetricName: 5xx
+    Dimensions: [{ Name: ApiId, Value: !Ref HttpApi }, { Name: Stage, Value: $default }]
+    Statistic: Sum
+    Period: 300
+    EvaluationPeriods: 1
+    Threshold: 5
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions: [!Ref AlertsTopic]
+ApiLatencyAlarm:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: ${self:service}-${sls:stage}-api-latency-p95
+    AlarmDescription: Latencia p95 de la API > 2 s
+    Namespace: AWS/ApiGateway
+    MetricName: Latency
+    Dimensions: [{ Name: ApiId, Value: !Ref HttpApi }, { Name: Stage, Value: $default }]
+    ExtendedStatistic: p95
+    Period: 300
+    EvaluationPeriods: 2
+    Threshold: 2000
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions: [!Ref AlertsTopic]
+ConsumerErrorsAlarm:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmName: ${self:service}-${sls:stage}-consumer-errors
+    Namespace: AWS/Lambda
+    MetricName: Errors
+    Dimensions: [{ Name: FunctionName, Value: !Ref EventsConsumerLambdaFunction }]
+    Statistic: Sum
+    Period: 300
+    EvaluationPeriods: 1
+    Threshold: 0
+    ComparisonOperator: GreaterThanThreshold
+    TreatMissingData: notBreaching
+    AlarmActions: [!Ref AlertsTopic]
+
+# ---------------- Frontend: S3 privado + CloudFront (OAC) ----------------
+FrontendBucket:
+  Type: AWS::S3::Bucket
+  Condition: DeployFrontend
+  Properties:
+    PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+    OwnershipControls: { Rules: [{ ObjectOwnership: BucketOwnerEnforced }] }
+    BucketEncryption: { ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }] }
+FrontendOAC:
+  Type: AWS::CloudFront::OriginAccessControl
+  Condition: DeployFrontend
+  Properties:
+    OriginAccessControlConfig:
+      Name: ${self:service}-${sls:stage}-oac
+      OriginAccessControlOriginType: s3
+      SigningBehavior: always
+      SigningProtocol: sigv4
+FrontendDistribution:
+  Type: AWS::CloudFront::Distribution
+  Condition: DeployFrontend
+  Properties:
+    DistributionConfig:
+      Enabled: true
+      Comment: TeleCorp Sentinel ${sls:stage}
+      DefaultRootObject: index.html
+      HttpVersion: http2and3
+      PriceClass: PriceClass_100
+      Origins:
+        - Id: s3
+          DomainName: !GetAtt FrontendBucket.RegionalDomainName
+          OriginAccessControlId: !GetAtt FrontendOAC.Id
+          S3OriginConfig: { OriginAccessIdentity: '' }
+      DefaultCacheBehavior:
+        TargetOriginId: s3
+        ViewerProtocolPolicy: redirect-to-https
+        Compress: true
+        CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # Managed-CachingOptimized
+        ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03 # Managed-SecurityHeadersPolicy
+      CustomErrorResponses:
+        - { ErrorCode: 403, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 0 }
+        - { ErrorCode: 404, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 0 }
+FrontendBucketPolicy:
+  Type: AWS::S3::BucketPolicy
+  Condition: DeployFrontend
+  Properties:
+    Bucket: !Ref FrontendBucket
+    PolicyDocument:
+      Statement:
+        - Sid: AllowCloudFrontOAC
+          Effect: Allow
+          Principal: { Service: cloudfront.amazonaws.com }
+          Action: s3:GetObject
+          Resource: !Join ['', [!GetAtt FrontendBucket.Arn, '/*']]
+          Condition:
+            StringEquals:
+              AWS:SourceArn: !Join ['', ['arn:aws:cloudfront::', !Ref AWS::AccountId, ':distribution/', !Ref FrontendDistribution]]

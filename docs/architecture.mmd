@@ -1,0 +1,87 @@
+%% TeleCorp Sentinel — Arquitectura (AWS núcleo serverless + Google Cloud IA)
+%% Render: npx -y @mermaid-js/mermaid-cli -i docs/architecture.mmd -o docs/architecture-mermaid.svg
+flowchart LR
+  classDef aws fill:#fff4e5,stroke:#e47911,color:#111
+  classDef gcp fill:#e8f0fe,stroke:#1a73e8,color:#111
+  classDef ext fill:#f4f4f2,stroke:#888,color:#111
+  classDef data fill:#eaf7ee,stroke:#1e8e3e,color:#111
+
+  CIU([Ciudadano<br/>portal público]):::ext
+  OPE([Operador NOC<br/>consola]):::ext
+  SIMU([Simulador<br/>datos sintéticos]):::ext
+
+  subgraph AWS["AWS (us-east-1) — núcleo serverless · AWS Academy LabRole"]
+    direction LR
+    CF[CloudFront + OAC<br/>S3 privado: React SPA]:::aws
+    APIGW[API Gateway HTTP API<br/>CORS restringido · throttling]:::aws
+    AUTHZ[Lambda Authorizer<br/>JWT HS256]:::aws
+    SM[(Secrets Manager<br/>clave maestra HKDF)]:::data
+    LAPI[Lambdas API<br/>public · operator · ingest]:::aws
+    DDB[(DynamoDB on-demand<br/>tabla única · 2 GSI · PITR · SSE<br/>Multi-AZ en la región)]:::data
+    STR[[DynamoDB Streams<br/>outbox]]:::aws
+    PUB[Lambda streamPublisher]:::aws
+    QEV[[SQS eventos]]:::aws
+    DLQ1[[DLQ eventos]]:::aws
+    CON[Lambda eventsConsumer<br/>telemetría en línea /<br/>StartExecution determinista]:::aws
+    SFN{{Step Functions Standard<br/>incident-workflow}}:::aws
+    QNO[[SQS notificaciones]]:::aws
+    DLQ2[[DLQ notificaciones]]:::aws
+    NOT[Lambda notificationsConsumer<br/>deduplicación]:::aws
+    SES[Amazon SES<br/>correo · sandbox]:::aws
+    EB[EventBridge<br/>regla 1 min · 5 min]:::aws
+    SIM[Lambda simulator]:::aws
+    REC[Lambda outboxReconciler]:::aws
+    CW[CloudWatch Logs JSON<br/>alarmas DLQ / errores / p95 / ExecutionsFailed]:::aws
+  end
+
+  subgraph SF["incident-workflow (Choice · Retry · Catch · Map)"]
+    direction TB
+    S1[LoadEvent] --> S2{RouteByType}
+    S2 -->|reporte / episodio| S3[ValidateAndCorrelate<br/>ventana &lt;24h · 10 usuarios distintos]
+    S2 -->|cambio de estado| S9[PropagateStatus]
+    S3 --> S4{HasChanges}
+    S4 -->|sí| S5[PersistIncidentAndHistory<br/>lock lógico + CAS]
+    S4 -->|no| S8
+    S5 --> S6[CalculatePriority<br/>determinista]
+    S6 --> S7{AIRequired}
+    S7 -->|apertura / cambio material| SM1[[Map: AnalyzeWithGCP<br/>Retry → Catch → Fallback AI_UNAVAILABLE]]
+    S7 -->|no| S8
+    SM1 --> S8[QueueNotifications]
+    S9 --> S8
+    S8 --> S10[MarkSucceeded]
+    S5 -. Catch .-> SX[MarkFailed → Fail<br/>PROC FALLIDO · replay]
+  end
+
+  subgraph GCP["Google Cloud (us-central1)"]
+    direction TB
+    STS[Google STS + IAM Credentials<br/>Workload Identity Federation AWS]:::gcp
+    RUN[Cloud Run PRIVADO<br/>FastAPI · min 0 / max 2]:::gcp
+    VAI[Vertex AI<br/>Gemini · JSON validado]:::gcp
+  end
+
+  CIU -->|HTTPS| CF
+  OPE -->|HTTPS| CF
+  CF -. SPA llama a .-> APIGW
+  APIGW -->|/operator/* · /telemetry| AUTHZ
+  AUTHZ -. GetSecretValue .-> SM
+  APIGW --> LAPI
+  LAPI -->|TransactWrite: registro + outbox + idempotencia| DDB
+  LAPI -. HMAC/AES-GCM .-> SM
+  DDB --> STR --> PUB --> QEV
+  PUB --> QNO
+  QEV --> CON
+  QEV -. maxReceive 5 .-> DLQ1
+  CON -->|evt-eventId| SFN
+  SFN --- SF
+  SFN -->|lee/escribe| DDB
+  S8 -->|NOTIF# con notExists| DDB
+  QNO --> NOT --> SES
+  QNO -. maxReceive 4 .-> DLQ2
+  EB --> SIM --> DDB
+  EB --> REC --> QEV
+  SIMU -. escenarios autenticados .-> APIGW
+  SM1 -->|SigV4 GetCallerIdentity| STS
+  STS -->|ID token audiencia=Cloud Run| SM1
+  SM1 -->|Bearer ID token · contexto anonimizado| RUN --> VAI
+  LAPI --> CW
+  SFN --> CW

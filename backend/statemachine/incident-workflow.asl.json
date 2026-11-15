@@ -1,0 +1,167 @@
+{
+  "Comment": "TeleCorp Sentinel - Flujo de analisis y correlacion de incidentes (Step Functions Standard). Mismo archivo para AWS y para el interprete local.",
+  "StartAt": "LoadEvent",
+  "States": {
+    "LoadEvent": {
+      "Type": "Task",
+      "Comment": "Carga el evento outbox persistido y marca el procesamiento EN_EJECUCION",
+      "Resource": "${LoadEventArn}",
+      "Parameters": { "eventId.$": "$.eventId" },
+      "ResultPath": "$.event",
+      "TimeoutSeconds": 30,
+      "Retry": [
+        { "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "ConcurrencyConflict", "TransientConflictError"], "IntervalSeconds": 1, "MaxAttempts": 4, "BackoffRate": 2, "JitterStrategy": "FULL" }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "MarkFailed" }],
+      "Next": "RouteByType"
+    },
+    "RouteByType": {
+      "Type": "Choice",
+      "Choices": [{ "Variable": "$.event.type", "StringEquals": "INCIDENT_STATUS_CHANGED", "Next": "PropagateStatus" }],
+      "Default": "ValidateAndCorrelate"
+    },
+    "ValidateAndCorrelate": {
+      "Type": "Task",
+      "Comment": "Ventana movil < 24h por zona+familia (lectura consistente), antenas candidatas, episodios de antena",
+      "Resource": "${ValidateAndCorrelateArn}",
+      "Parameters": { "event.$": "$.event" },
+      "ResultPath": "$.decision",
+      "TimeoutSeconds": 60,
+      "Retry": [
+        { "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "TransientConflictError"], "IntervalSeconds": 1, "MaxAttempts": 4, "BackoffRate": 2, "JitterStrategy": "FULL" }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "MarkFailed" }],
+      "Next": "HasChanges"
+    },
+    "HasChanges": {
+      "Type": "Choice",
+      "Choices": [{ "Variable": "$.decision.action", "StringEquals": "NO_CHANGE", "Next": "QueueNotifications" }],
+      "Default": "PersistIncidentAndHistory"
+    },
+    "PersistIncidentAndHistory": {
+      "Type": "Task",
+      "Comment": "Crea o actualiza el unico incidente activo por clave logica (bloqueo condicional + CAS) y su historial",
+      "Resource": "${PersistIncidentAndHistoryArn}",
+      "Parameters": { "eventId.$": "$.eventId", "event.$": "$.event", "decision.$": "$.decision" },
+      "ResultPath": "$.persist",
+      "TimeoutSeconds": 120,
+      "Retry": [
+        { "ErrorEquals": ["ConcurrencyConflict", "TransientConflictError"], "IntervalSeconds": 1, "MaxAttempts": 6, "BackoffRate": 2, "MaxDelaySeconds": 20, "JitterStrategy": "FULL" },
+        { "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"], "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "MarkFailed" }],
+      "Next": "CalculatePriority"
+    },
+    "CalculatePriority": {
+      "Type": "Task",
+      "Comment": "Puntaje determinista y explicable (la IA no participa)",
+      "Resource": "${CalculatePriorityArn}",
+      "Parameters": { "eventId.$": "$.eventId", "persist.$": "$.persist" },
+      "ResultPath": "$.priority",
+      "TimeoutSeconds": 60,
+      "Retry": [
+        { "ErrorEquals": ["ConcurrencyConflict", "TransientConflictError", "Lambda.ServiceException", "Lambda.TooManyRequestsException"], "IntervalSeconds": 1, "MaxAttempts": 5, "BackoffRate": 2, "JitterStrategy": "FULL" }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "MarkFailed" }],
+      "Next": "AIRequired"
+    },
+    "AIRequired": {
+      "Type": "Choice",
+      "Comment": "IA solo en apertura o cambio material, nunca por cada metrica",
+      "Choices": [{ "Variable": "$.priority.aiTargets[0]", "IsPresent": true, "Next": "AnalyzeIncidents" }],
+      "Default": "QueueNotifications"
+    },
+    "AnalyzeIncidents": {
+      "Type": "Map",
+      "ItemsPath": "$.priority.aiTargets",
+      "ItemSelector": { "incidentId.$": "$$.Map.Item.Value", "eventId.$": "$.eventId" },
+      "MaxConcurrency": 2,
+      "ItemProcessor": {
+        "ProcessorConfig": { "Mode": "INLINE" },
+        "StartAt": "AnalyzeWithGCP",
+        "States": {
+          "AnalyzeWithGCP": {
+            "Type": "Task",
+            "Comment": "Google Cloud Run privado + Vertex AI Gemini (WIF AWS->GCP)",
+            "Resource": "${AnalyzeWithGcpArn}",
+            "TimeoutSeconds": 30,
+            "Retry": [
+              { "ErrorEquals": ["AiTransientError", "Lambda.ServiceException", "Lambda.TooManyRequestsException", "States.Timeout"], "IntervalSeconds": 2, "MaxAttempts": 2, "BackoffRate": 2 }
+            ],
+            "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.aiError", "Next": "BuildFallbackAnalysis" }],
+            "Next": "PersistAnalysis"
+          },
+          "BuildFallbackAnalysis": {
+            "Type": "Task",
+            "Comment": "Respaldo por reglas locales etiquetado AI_UNAVAILABLE",
+            "Resource": "${BuildFallbackAnalysisArn}",
+            "Parameters": { "incidentId.$": "$.incidentId", "eventId.$": "$.eventId", "aiError.$": "$.aiError" },
+            "Next": "PersistAnalysis"
+          },
+          "PersistAnalysis": {
+            "Type": "Task",
+            "Resource": "${PersistAnalysisArn}",
+            "Retry": [
+              { "ErrorEquals": ["ConcurrencyConflict", "TransientConflictError", "Lambda.ServiceException", "Lambda.TooManyRequestsException"], "IntervalSeconds": 1, "MaxAttempts": 5, "BackoffRate": 2, "JitterStrategy": "FULL" }
+            ],
+            "End": true
+          }
+        }
+      },
+      "ResultPath": "$.ai",
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.aiFailure", "Next": "QueueNotifications" }],
+      "Next": "QueueNotifications"
+    },
+    "PropagateStatus": {
+      "Type": "Task",
+      "Comment": "Propaga el estado del incidente a sus reportes con historial",
+      "Resource": "${PropagateStatusArn}",
+      "Parameters": { "event.$": "$.event" },
+      "ResultPath": "$.propagation",
+      "TimeoutSeconds": 120,
+      "Retry": [
+        { "ErrorEquals": ["ConcurrencyConflict", "TransientConflictError", "Lambda.ServiceException", "Lambda.TooManyRequestsException"], "IntervalSeconds": 1, "MaxAttempts": 5, "BackoffRate": 2, "JitterStrategy": "FULL" }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "MarkFailed" }],
+      "Next": "QueueNotifications"
+    },
+    "QueueNotifications": {
+      "Type": "Task",
+      "Comment": "Registra notificaciones deduplicadas; el envio real ocurre en la cola de notificaciones",
+      "Resource": "${QueueNotificationsArn}",
+      "ResultPath": "$.notifications",
+      "TimeoutSeconds": 120,
+      "Retry": [
+        { "ErrorEquals": ["ConcurrencyConflict", "TransientConflictError", "Lambda.ServiceException", "Lambda.TooManyRequestsException"], "IntervalSeconds": 1, "MaxAttempts": 4, "BackoffRate": 2, "JitterStrategy": "FULL" }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.notificationError", "Next": "NotificationsDeferred" }],
+      "Next": "MarkSucceeded"
+    },
+    "NotificationsDeferred": {
+      "Type": "Pass",
+      "Comment": "Las notificaciones no bloquean la deteccion ni pierden la incidencia",
+      "Result": { "deferred": true },
+      "ResultPath": "$.notificationsDeferred",
+      "Next": "MarkSucceeded"
+    },
+    "MarkSucceeded": {
+      "Type": "Task",
+      "Resource": "${MarkSucceededArn}",
+      "Parameters": { "eventId.$": "$.eventId" },
+      "ResultPath": "$.result",
+      "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 1, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Next": "Done"
+    },
+    "Done": { "Type": "Succeed" },
+    "MarkFailed": {
+      "Type": "Task",
+      "Comment": "Persiste el fallo trazable (PROC#eventId = FALLIDO) para alarma y replay especifico",
+      "Resource": "${MarkFailedArn}",
+      "Parameters": { "eventId.$": "$.eventId", "error.$": "$.error" },
+      "ResultPath": "$.result",
+      "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 1, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Next": "Failed"
+    },
+    "Failed": { "Type": "Fail", "Error": "IncidentWorkflowFailed", "Cause": "Ver registro PROC del evento y CloudWatch Logs" }
+  }
+}

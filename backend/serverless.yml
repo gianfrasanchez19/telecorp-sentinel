@@ -1,0 +1,223 @@
+# TeleCorp Sentinel — infraestructura AWS (Serverless Framework v4, como en el curso CS2032).
+#
+# Despliegue (ver scripts/deploy-aws.sh, que valida identidad y pide confirmación):
+#   npm run build -w backend
+#   cd backend && npx serverless deploy --stage dev --param="labRoleArn=arn:aws:iam::<CUENTA>:role/LabRole" ...
+#
+# AWS Academy: NO se pueden crear roles IAM => todas las funciones, Step Functions y
+# EventBridge Scheduler usan el rol existente LabRole (parámetro labRoleArn).
+# Cuentas normales: crear antes el rol de mínimo privilegio de infra/aws/iam-roles.yml
+# y pasar su ARN en labRoleArn.
+#
+# Serverless Framework v4 pide iniciar sesión (serverless login) y elegir "org" en el
+# primer despliegue; descomente y complete la línea siguiente si lo prefiere:
+# org: <tu-org-de-serverless>
+service: telecorp-sentinel
+frameworkVersion: '4'
+
+params:
+  default:
+    region: us-east-1
+    labRoleArn: ''
+    corsOrigins: 'http://localhost:5173'
+    sesFromEmail: ''
+    notifyAllowedRecipients: ''
+    smsEnabled: 'false'
+    aiServiceUrl: ''
+    aiAuthMode: wif
+    gcpProjectNumber: ''
+    gcpWifPool: telecorp-aws-pool
+    gcpWifProvider: telecorp-aws-provider
+    gcpInvokerSa: ''
+    simulatorEnabled: 'false'
+    simulatorMaxEvents: '14'
+    scheduleKind: rule # rule (EventBridge rule, enseñado en S14) | scheduler (EventBridge Scheduler, usa labRoleArn)
+    pitr: 'true'
+    deletionProtection: 'false'
+    tracing: 'true' # Step Functions + Lambda (X-Ray); 'false' si X-Ray no está disponible
+    lambdaTracing: Active # Active | PassThrough
+    architecture: arm64 # arm64 (más barato) | x86_64
+    alertEmail: ''
+    deployFrontend: 'true'
+    eventsMaxConcurrency: '5'
+    notificationsMaxConcurrency: '2'
+    apiBurst: '100'
+    apiRate: '50'
+    reportsPerMinutePerIp: '20'
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  architecture: ${param:architecture}
+  region: ${param:region}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 20
+  logRetentionInDays: 14
+  iam:
+    role: ${param:labRoleArn}
+  tracing:
+    lambda: ${param:lambdaTracing}
+  environment:
+    STAGE: ${sls:stage}
+    TABLE_NAME: !Ref SentinelTable
+    SECRET_ARN: !Ref AppSecret
+    EVENTS_QUEUE_URL: !Ref EventsQueue
+    NOTIFICATIONS_QUEUE_URL: !Ref NotificationsQueue
+    STATE_MACHINE_ARN: arn:aws:states:${aws:region}:${aws:accountId}:stateMachine:${self:service}-${sls:stage}-incident-workflow
+    SES_FROM_EMAIL: ${param:sesFromEmail}
+    NOTIFY_ALLOWED_RECIPIENTS: ${param:notifyAllowedRecipients}
+    SMS_ENABLED: ${param:smsEnabled}
+    AI_SERVICE_URL: ${param:aiServiceUrl}
+    AI_AUTH_MODE: ${param:aiAuthMode}
+    GCP_PROJECT_NUMBER: ${param:gcpProjectNumber}
+    GCP_WIF_POOL: ${param:gcpWifPool}
+    GCP_WIF_PROVIDER: ${param:gcpWifProvider}
+    GCP_INVOKER_SA: ${param:gcpInvokerSa}
+    SIMULATOR_MAX_EVENTS: ${param:simulatorMaxEvents}
+    REPORTS_PER_MINUTE_PER_IP: ${param:reportsPerMinutePerIp}
+    NODE_OPTIONS: --enable-source-maps
+  httpApi:
+    cors:
+      allowedOrigins:
+        - ${param:corsOrigins}
+      allowedHeaders: [Content-Type, Authorization, Idempotency-Key]
+      allowedMethods: [GET, POST, PATCH, OPTIONS]
+      maxAge: 600
+    authorizers:
+      jwtOperator:
+        type: request
+        functionName: authorizer
+        identitySource: $request.header.Authorization
+        enableSimpleResponses: true
+        resultTtlInSeconds: 0
+  tags:
+    project: telecorp-sentinel
+    course: CS2032-2026-2
+
+# Build integrado desactivado: el bundle ESM lo genera backend/scripts/build.ts.
+build:
+  esbuild: false
+package:
+  patterns:
+    - '!**'
+    - dist/lambda/**
+
+functions:
+  # ---------- API Gateway HTTP API ----------
+  publicApi:
+    handler: dist/lambda/handlers.publicApi
+    description: Rutas públicas (health, catálogo, reportes, consulta de ticket, login)
+    events:
+      - httpApi: 'GET /health'
+      - httpApi: 'GET /catalog'
+      - httpApi: 'POST /reports'
+      - httpApi: 'POST /reports/lookup'
+      - httpApi: 'POST /auth/login'
+  ingestApi:
+    handler: dist/lambda/handlers.ingestApi
+    description: Ingesta autenticada de telemetría
+    events:
+      - httpApi: { method: POST, path: /telemetry, authorizer: { name: jwtOperator } }
+  operatorApi:
+    handler: dist/lambda/handlers.operatorApi
+    description: Consola del operador (protegida por Lambda Authorizer)
+    timeout: 29
+    events:
+      - httpApi: { method: GET, path: /operator/reports, authorizer: { name: jwtOperator } }
+      - httpApi: { method: GET, path: /operator/antennas, authorizer: { name: jwtOperator } }
+      - httpApi: { method: GET, path: '/operator/antennas/{id}/metrics', authorizer: { name: jwtOperator } }
+      - httpApi: { method: GET, path: /operator/incidents, authorizer: { name: jwtOperator } }
+      - httpApi: { method: GET, path: '/operator/incidents/{id}', authorizer: { name: jwtOperator } }
+      - httpApi: { method: GET, path: '/operator/incidents/{id}/history', authorizer: { name: jwtOperator } }
+      - httpApi: { method: PATCH, path: '/operator/incidents/{id}/status', authorizer: { name: jwtOperator } }
+      - httpApi: { method: GET, path: /operator/analytics, authorizer: { name: jwtOperator } }
+      - httpApi: { method: GET, path: /operator/simulator, authorizer: { name: jwtOperator } }
+      - httpApi: { method: POST, path: /operator/simulator/scenarios, authorizer: { name: jwtOperator } }
+      - httpApi: { method: GET, path: /operator/processing, authorizer: { name: jwtOperator } }
+      - httpApi: { method: POST, path: '/operator/processing/{eventId}/replay', authorizer: { name: jwtOperator } }
+  authorizer:
+    handler: dist/lambda/handlers.authorizer
+    description: Valida JWT HS256 (clave derivada de Secrets Manager); Cognito no está disponible en AWS Academy
+    memorySize: 256
+    timeout: 5
+
+  # ---------- Outbox / colas ----------
+  streamPublisher:
+    handler: dist/lambda/handlers.streamPublisher
+    description: DynamoDB Streams -> SQS (patrón outbox)
+    events:
+      - stream:
+          type: dynamodb
+          arn: !GetAtt SentinelTable.StreamArn
+          batchSize: 25
+          maximumBatchingWindow: 1
+          startingPosition: LATEST
+          maximumRetryAttempts: 10
+          maximumRecordAgeInSeconds: 3600
+          bisectBatchOnFunctionError: true
+          functionResponseType: ReportBatchItemFailures
+          destinations:
+            onFailure:
+              type: sqs
+              arn: !GetAtt StreamFailuresDLQ.Arn
+          filterPatterns:
+            - { eventName: [INSERT], dynamodb: { Keys: { pk: { S: [{ prefix: 'OUTBOX#' }] } } } }
+            - { eventName: [INSERT], dynamodb: { Keys: { pk: { S: [{ prefix: 'NOTIF#' }] } } } }
+  eventsConsumer:
+    handler: dist/lambda/handlers.eventsConsumer
+    description: SQS eventos -> aplica telemetría o inicia Step Functions (nombre determinista)
+    timeout: 30
+    events:
+      - sqs:
+          arn: !GetAtt EventsQueue.Arn
+          batchSize: 10
+          maximumBatchingWindow: 1
+          functionResponseType: ReportBatchItemFailures
+          maximumConcurrency: ${param:eventsMaxConcurrency}
+  notificationsConsumer:
+    handler: dist/lambda/handlers.notificationsConsumer
+    description: SQS notificaciones -> Amazon SES / SNS (deduplicado)
+    timeout: 30
+    events:
+      - sqs:
+          arn: !GetAtt NotificationsQueue.Arn
+          batchSize: 5
+          functionResponseType: ReportBatchItemFailures
+          maximumConcurrency: ${param:notificationsMaxConcurrency}
+
+  # ---------- Pasos de Step Functions ----------
+  wfLoadEvent: { handler: dist/lambda/handlers.wfLoadEvent, timeout: 25 }
+  wfValidateAndCorrelate: { handler: dist/lambda/handlers.wfValidateAndCorrelate, timeout: 55 }
+  wfPersistIncidentAndHistory: { handler: dist/lambda/handlers.wfPersistIncidentAndHistory, timeout: 110 }
+  wfCalculatePriority: { handler: dist/lambda/handlers.wfCalculatePriority, timeout: 55 }
+  wfAnalyzeWithGcp: { handler: dist/lambda/handlers.wfAnalyzeWithGcp, timeout: 25, description: 'Invoca Cloud Run (GCP) + Vertex AI Gemini vía WIF' }
+  wfBuildFallbackAnalysis: { handler: dist/lambda/handlers.wfBuildFallbackAnalysis, timeout: 15 }
+  wfPersistAnalysis: { handler: dist/lambda/handlers.wfPersistAnalysis, timeout: 25 }
+  wfPropagateStatus: { handler: dist/lambda/handlers.wfPropagateStatus, timeout: 110 }
+  wfQueueNotifications: { handler: dist/lambda/handlers.wfQueueNotifications, timeout: 110 }
+  wfMarkSucceeded: { handler: dist/lambda/handlers.wfMarkSucceeded, timeout: 15 }
+  wfMarkFailed: { handler: dist/lambda/handlers.wfMarkFailed, timeout: 15 }
+
+  # ---------- Programados ----------
+  simulator:
+    handler: dist/lambda/handlers.simulator
+    description: Simulador de telemetría sintética (cada minuto, apagable)
+    timeout: 50
+  outboxReconciler:
+    handler: dist/lambda/handlers.outboxReconciler
+    description: Re-publica eventos outbox pendientes (por si el stream falló o expiró)
+    timeout: 60
+    events:
+      - schedule: rate(5 minutes)
+
+resources:
+  Conditions: ${file(../infra/aws/conditions.yml)}
+  Resources: ${file(../infra/aws/resources.yml)}
+  Outputs: ${file(../infra/aws/outputs.yml)}
+  extensions:
+    HttpApiStage:
+      Properties:
+        DefaultRouteSettings:
+          ThrottlingBurstLimit: ${param:apiBurst}
+          ThrottlingRateLimit: ${param:apiRate}

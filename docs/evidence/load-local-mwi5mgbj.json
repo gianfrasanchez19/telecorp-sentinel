@@ -1,0 +1,44 @@
+{
+  "api": "http://localhost:3001",
+  "runId": "mwi5mgbj",
+  "at": "2026-11-15T18:14:44.391Z",
+  "total": 500,
+  "concurrency": 50,
+  "counts": {
+    "sent": 500,
+    "accepted": 500,
+    "duplicate": 0,
+    "rejected4xx": 0,
+    "throttled429": 0,
+    "errors5xxOrNetwork": 0
+  },
+  "ingestDurationMs": 397,
+  "throughputPerSec": 1259,
+  "latencyMs": {
+    "p50": 37,
+    "p95": 58,
+    "max": 64
+  },
+  "processing": {
+    "before": {
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 21,
+      "FALLIDO": 0,
+      "pendingOutbox": 0
+    },
+    "after": {
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 521,
+      "FALLIDO": 0,
+      "pendingOutbox": 0
+    },
+    "expectedCompleted": 521,
+    "processedThisRun": 500,
+    "failed": 0,
+    "pendingOutbox": 0,
+    "converged": true,
+    "convergenceMs": 2116
+  }
+}

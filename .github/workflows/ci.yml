@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: Backend + frontend (typecheck, lint, tests, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+        env:
+          LOG_SILENT: '1'
+      - run: npm run demo -w backend
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: statemachine-definition
+          path: backend/dist/statemachine-definition.json
+
+  ai-service:
+    name: Servicio IA (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: ai-service/requirements-dev.txt
+      - run: pip install -r ai-service/requirements-dev.txt
+      - run: python -m pytest -q
+        working-directory: ai-service
+
+  iac:
+    name: Validación IaC (cfn-lint, sin desplegar)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build -w backend
+      - run: pip install cfn-lint pyyaml
+      - run: python scripts/validate_iac.py
+      - name: Escaneo de secretos y material privado
+        run: bash scripts/check-no-secrets.sh
+      - name: Sintaxis de scripts bash
+        run: for f in scripts/*.sh infra/gcp/*.sh; do bash -n "$f"; done
+
+  # El despliegue NO se automatiza: AWS Academy entrega credenciales temporales (4 h)
+  # y no permite crear el rol OIDC. Se despliega manualmente con scripts/deploy-aws.sh.

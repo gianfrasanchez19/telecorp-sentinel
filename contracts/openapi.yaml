@@ -1,0 +1,178 @@
+openapi: 3.1.0
+info:
+  title: TeleCorp Sentinel API
+  version: 0.1.0
+  description: |
+    API de reportes de servicio móvil, telemetría de antenas e incidentes.
+    Contrato uniforme: éxito `{ data, meta: { requestId } }`; error `{ error: { code, message, details? }, meta: { requestId } }`.
+    Fechas ISO-8601 UTC. Datos de demostración SINTÉTICOS. Las rutas `/operator/*` y `/telemetry`
+    requieren `Authorization: Bearer <JWT>` validado por un Lambda Authorizer.
+servers:
+  - url: https://{apiId}.execute-api.{region}.amazonaws.com
+    variables: { apiId: { default: xxxxxxxxxx }, region: { default: us-east-1 } }
+  - url: http://localhost:3001
+    description: Servidor local EMULADO
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: object, properties: { code: { type: string }, message: { type: string }, details: {} }, required: [code, message] }
+        meta: { $ref: '#/components/schemas/Meta' }
+    Meta: { type: object, properties: { requestId: { type: string } } }
+    CaseStatus: { type: string, enum: [REGISTRADA, EN_REVISION, EN_ATENCION, SOLUCIONADA, CERRADA] }
+    ReportInput:
+      type: object
+      additionalProperties: false
+      required: [documentType, documentNumber, serviceNumber, zoneId, occurredAt, problemType, description, idempotencyKey]
+      properties:
+        documentType: { type: string, enum: [DNI, CE, PASAPORTE] }
+        documentNumber: { type: string, minLength: 5, maxLength: 20, description: Sólo se usa para HMAC (seudónimo); nunca se devuelve }
+        serviceNumber: { type: string, pattern: '^(\+?51)?\s?9\d{2}\s?\d{3}\s?\d{3}$' }
+        zoneId: { type: string, description: Debe existir en el catálogo }
+        locationHint: { type: string, maxLength: 120 }
+        occurredAt: { type: string, format: date-time, description: 'UTC; no futuro (tolerancia 5 min); máx. 7 días' }
+        problemType: { type: string, enum: [SIN_SENAL, SIN_DATOS_MOVILES, INTERNET_LENTO, INTERMITENCIA, LLAMADAS_CAIDAS, NO_PUEDE_LLAMAR, SMS_NO_LLEGAN, FACTURACION, OTRO] }
+        description: { type: string, minLength: 10, maxLength: 1000 }
+        contact: { type: object, additionalProperties: false, properties: { email: { type: string, format: email }, phone: { type: string } } }
+        notifyConsent: { type: boolean, default: false }
+        idempotencyKey: { type: string, minLength: 16, maxLength: 100, description: 'También aceptado como cabecera Idempotency-Key' }
+    ReportCreated:
+      type: object
+      properties:
+        ticketId: { type: string, example: TCK-7K2M9Q4ZP1XA }
+        token: { type: string, description: Token de consulta (256 bits). Sólo se almacena su SHA-256. }
+        status: { $ref: '#/components/schemas/CaseStatus' }
+        receivedAt: { type: string, format: date-time }
+        duplicate: { type: boolean }
+    TelemetryInput:
+      type: object
+      additionalProperties: false
+      required: [eventId, antennaId, zoneId, gbPerMinute, observedAt]
+      properties:
+        eventId: { type: string, pattern: '^[A-Za-z0-9._:-]{8,100}$' }
+        antennaId: { type: string }
+        zoneId: { type: string }
+        gbPerMinute: { type: number, minimum: 0, description: '0 INHABILITADA; (0,60) CAIDA; [60,129] NORMAL; >129 SATURADA' }
+        observedAt: { type: string, format: date-time }
+paths:
+  /health:
+    get: { summary: Estado del servicio (sin información sensible), responses: { '200': { description: OK } } }
+  /catalog:
+    get: { summary: Catálogo sintético de zonas, antenas, celdas y tipos de problema, responses: { '200': { description: OK } } }
+  /reports:
+    post:
+      summary: Registrar un reporte (durable e idempotente; TransactWrite + outbox)
+      parameters: [{ in: header, name: Idempotency-Key, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReportInput' } } } }
+      responses:
+        '201': { description: Creado, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/ReportCreated' } } } } } }
+        '200': { description: Reintento idempotente (mismo ticket y token) }
+        '400': { description: Validación, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Clave de idempotencia reutilizada con otros datos }
+        '429': { description: Límite por IP }
+  /reports/lookup:
+    post:
+      summary: Consultar ticket con token (en el cuerpo, nunca en la URL)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [token], properties: { token: { type: string } } } } } }
+      responses: { '200': { description: Vista pública sin PII }, '404': { description: No encontrado } }
+  /auth/login:
+    post:
+      summary: Login de operador (JWT HS256, 1 h)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [username, password], properties: { username: { type: string }, password: { type: string } } } } } }
+      responses: { '200': { description: Token }, '401': { description: Credenciales inválidas }, '429': { description: Demasiados intentos } }
+  /telemetry:
+    post:
+      security: [{ bearer: [] }]
+      summary: Ingesta de métrica de antena (rol INGESTA u OPERADOR)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TelemetryInput' } } } }
+      responses: { '202': { description: Aceptada }, '200': { description: Duplicada (mismo eventId) }, '400': { description: Inválida }, '401': { description: No autenticado } }
+  /operator/reports:
+    get:
+      security: [{ bearer: [] }]
+      summary: Reportes (PII enmascarada) por rango (máx. 31 días)
+      parameters:
+        - { in: query, name: from, schema: { type: string, format: date-time } }
+        - { in: query, name: to, schema: { type: string, format: date-time } }
+        - { in: query, name: zone, schema: { type: string } }
+        - { in: query, name: status, schema: { $ref: '#/components/schemas/CaseStatus' } }
+        - { in: query, name: limit, schema: { type: integer, maximum: 1000 } }
+      responses: { '200': { description: OK } }
+  /operator/antennas:
+    get: { security: [{ bearer: [] }], summary: 'Antenas: última medición, estado (incl. SIN_DATOS), tendencia, recurrencia', responses: { '200': { description: OK } } }
+  /operator/antennas/{id}/metrics:
+    get:
+      security: [{ bearer: [] }]
+      summary: Historial de métricas (GB/min) y episodios
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+        - { in: query, name: from, schema: { type: string, format: date-time } }
+        - { in: query, name: to, schema: { type: string, format: date-time } }
+      responses: { '200': { description: OK }, '404': { description: Antena no existe } }
+  /operator/incidents:
+    get:
+      security: [{ bearer: [] }]
+      summary: Cola de incidentes ordenada por prioridad determinista
+      parameters:
+        - { in: query, name: active, schema: { type: boolean, default: true } }
+        - { in: query, name: zone, schema: { type: string } }
+        - { in: query, name: level, schema: { type: string, enum: [CRITICA, ALTA, MEDIA, BAJA] } }
+        - { in: query, name: kind, schema: { type: string, enum: [INFRAESTRUCTURA, COLECTIVO] } }
+      responses: { '200': { description: OK } }
+  /operator/incidents/{id}:
+    get:
+      security: [{ bearer: [] }]
+      summary: Detalle con historial, evidencia, análisis IA, notificaciones y transiciones permitidas
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK }, '404': { description: No existe } }
+  /operator/incidents/{id}/history:
+    get:
+      security: [{ bearer: [] }]
+      summary: Historial inmutable (fecha, actor, motivo, estado anterior/nuevo)
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK } }
+  /operator/incidents/{id}/status:
+    patch:
+      security: [{ bearer: [] }]
+      summary: Cambio de estado validado (o reapertura explícita) con motivo
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reason]
+              properties:
+                status: { $ref: '#/components/schemas/CaseStatus' }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+                reopen: { type: boolean }
+                expectedVersion: { type: integer, description: Control de concurrencia optimista }
+      responses: { '200': { description: OK }, '409': { description: Transición no permitida o versión desactualizada } }
+  /operator/analytics:
+    get:
+      security: [{ bearer: [] }]
+      summary: KPIs, series temporales, MTTD/MTTR y rankings sobre datos persistidos
+      parameters:
+        - { in: query, name: from, schema: { type: string, format: date-time } }
+        - { in: query, name: to, schema: { type: string, format: date-time } }
+        - { in: query, name: zone, schema: { type: string } }
+      responses: { '200': { description: OK } }
+  /operator/simulator:
+    get: { security: [{ bearer: [] }], summary: Estado del simulador y escenarios, responses: { '200': { description: OK } } }
+  /operator/simulator/scenarios:
+    post:
+      security: [{ bearer: [] }]
+      summary: Ejecutar escenario sintético (o "tick" de un minuto de telemetría)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [scenario], properties: { scenario: { type: string }, params: { type: object } } } } } }
+      responses: { '202': { description: Ejecutado } }
+  /operator/processing:
+    get: { security: [{ bearer: [] }], summary: 'Ejecuciones por estado, outbox pendiente y fallos recientes', responses: { '200': { description: OK } } }
+  /operator/processing/{eventId}/replay:
+    post:
+      security: [{ bearer: [] }]
+      summary: Replay específico de un evento cuya ejecución de Step Functions falló
+      parameters: [{ in: path, name: eventId, required: true, schema: { type: string } }]
+      responses: { '202': { description: Re-ejecución iniciada (nombre evt-<id>-rN) } }

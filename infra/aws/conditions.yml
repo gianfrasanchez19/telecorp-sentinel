@@ -1,0 +1,8 @@
+# Condiciones CloudFormation (incluidas desde backend/serverless.yml)
+UsePitr: !Equals ['${param:pitr}', 'true']
+UseScheduler: !Equals ['${param:scheduleKind}', 'scheduler']
+UseEventRule: !Not [!Equals ['${param:scheduleKind}', 'scheduler']]
+SimulatorOn: !Equals ['${param:simulatorEnabled}', 'true']
+HasAlertEmail: !Not [!Equals ['${param:alertEmail}', '']]
+DeployFrontend: !Equals ['${param:deployFrontend}', 'true']
+TracingOn: !Equals ['${param:tracing}', 'true']

@@ -1,0 +1,74 @@
+# Rol de MÍNIMO PRIVILEGIO para cuentas AWS que SÍ permiten crear roles IAM
+# (en AWS Academy no se usa: allí se pasa el ARN de LabRole).
+#   aws cloudformation deploy --template-file infra/aws/iam-roles.yml \
+#     --stack-name telecorp-sentinel-iam-dev --capabilities CAPABILITY_NAMED_IAM \
+#     --parameter-overrides Stage=dev
+# Luego: serverless deploy --param="labRoleArn=<RoleArn de las salidas>"
+AWSTemplateFormatVersion: '2010-09-09'
+Description: TeleCorp Sentinel - rol de ejecución con permisos acotados
+Parameters:
+  Stage: { Type: String, Default: dev }
+  Service: { Type: String, Default: telecorp-sentinel }
+Resources:
+  SentinelRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${Service}-${Stage}-exec'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: [lambda.amazonaws.com, states.amazonaws.com, scheduler.amazonaws.com] }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+      Policies:
+        - PolicyName: sentinel-least-privilege
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: Dynamo
+                Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:DeleteItem, dynamodb:Query, dynamodb:ConditionCheckItem]
+                Resource:
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Service}-${Stage}'
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Service}-${Stage}/index/*'
+              - Sid: DynamoStream
+                Effect: Allow
+                Action: [dynamodb:DescribeStream, dynamodb:GetRecords, dynamodb:GetShardIterator, dynamodb:ListStreams]
+                Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Service}-${Stage}/stream/*'
+              - Sid: Queues
+                Effect: Allow
+                Action: [sqs:SendMessage, sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes, sqs:ChangeMessageVisibility]
+                Resource: !Sub 'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:${Service}-${Stage}-*'
+              - Sid: StepFunctions
+                Effect: Allow
+                Action: [states:StartExecution, states:DescribeExecution]
+                Resource:
+                  - !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${Service}-${Stage}-incident-workflow'
+                  - !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:${Service}-${Stage}-incident-workflow:*'
+              - Sid: InvokeOwnLambdas
+                Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Service}-${Stage}-*'
+              - Sid: Secret
+                Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:telecorp-sentinel/${Stage}/app-*'
+              - Sid: Email
+                Effect: Allow
+                Action: ses:SendEmail
+                Resource: '*'
+              - Sid: Sms
+                Effect: Allow
+                Action: sns:Publish
+                Resource: '*'
+                Condition: { StringEquals: { 'sns:Protocol': sms } }
+              - Sid: StatesLogs
+                Effect: Allow
+                Action: [logs:CreateLogDelivery, logs:GetLogDelivery, logs:UpdateLogDelivery, logs:DeleteLogDelivery, logs:ListLogDeliveries, logs:PutResourcePolicy, logs:DescribeResourcePolicies, logs:DescribeLogGroups]
+                Resource: '*'
+Outputs:
+  RoleArn:
+    Value: !GetAtt SentinelRole.Arn

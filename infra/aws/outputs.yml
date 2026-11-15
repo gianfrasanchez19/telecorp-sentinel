@@ -1,0 +1,20 @@
+TableName:
+  Value: !Ref SentinelTable
+StateMachineArn:
+  Value: !Ref IncidentWorkflow
+SecretArn:
+  Description: Secreto en AWS Secrets Manager (clave maestra; nunca se imprime)
+  Value: !Ref AppSecret
+EventsDLQUrl:
+  Value: !Ref EventsDLQ
+FrontendBucket:
+  Condition: DeployFrontend
+  Value: !Ref FrontendBucket
+CloudFrontUrl:
+  Condition: DeployFrontend
+  Value: !Join ['', ['https://', !GetAtt FrontendDistribution.DomainName]]
+CloudFrontDistributionId:
+  Condition: DeployFrontend
+  Value: !Ref FrontendDistribution
+AlertsTopicArn:
+  Value: !Ref AlertsTopic
