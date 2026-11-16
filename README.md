@@ -1,25 +1,31 @@
 # TeleCorp Sentinel
 
-Monitoreo de antenas móviles, reportes ciudadanos e incidentes priorizados con IA.
-**Hackathon Cloud Computing UTEC 2026-2 · Grupo 60** · 100 % serverless: **AWS** (núcleo) + **Google Cloud** (IA).
+**Monitoreo de antenas móviles, reportes ciudadanos e incidentes priorizados con IA, sobre una arquitectura 100 % serverless en AWS y Google Cloud.**
+
+Hackathon de Cloud Computing (CS2032) · UTEC · 2026-2 · **Grupo 60**
+
+Cuando una antena falla, el operador suele enterarse tarde: la telemetría y los reclamos de los usuarios llegan por canales distintos y nadie los cruza. TeleCorp Sentinel une ambas fuentes. Clasifica cada lectura de antena, agrupa los reportes ciudadanos por zona y tipo de problema, detecta incidentes individuales y colectivos, los prioriza con un puntaje explicable y mantiene informados a los usuarios. AWS concentra el núcleo transaccional y la orquestación con Step Functions; Google Cloud aporta el análisis con Gemini, que asiste al operador sin tomar decisiones.
 
 > Proyecto académico con **datos sintéticos**: zonas, antenas, coordenadas y coberturas son ficticias. No representa a ningún operador real.
 
-## Equipo — Grupo 60
+## Integrantes
 
-- **André Gianfranco Sánchez Echevarría**
-- **Renzo Chen Heng Liang Corrales**
+| Integrante |
+|---|
+| André Gianfranco Sánchez Echevarría |
+| Renzo Chen Heng Liang Corrales |
 
-Curso: Cloud Computing (CS2032) · UTEC · 2026-2 · [Hackathon](https://hackutec-cloud-2026-2.vercel.app/)
+## Demo y entregables
 
-## Entrega
-
-| Entregable | Dónde |
+| | |
 |---|---|
-| Repositorio | este repositorio |
+| Portal desplegado (HTTPS) | https://e8iarrhhf8.execute-api.us-east-1.amazonaws.com/ · AWS Academy, us-east-1 |
 | Arquitectura (imagen) | [`docs/architecture.png`](docs/architecture.png) |
-| Arquitectura interactiva (cada nodo enlaza al código que lo implementa) | [`docs/architecture-interactive.html`](docs/architecture-interactive.html) · fuente [`docs/architecture.archify.json`](docs/architecture.archify.json) |
+| Arquitectura interactiva | [`docs/architecture-interactive.html`](docs/architecture-interactive.html): descárgalo y ábrelo en el navegador; cada nodo enlaza al código que lo implementa (fuente: [`docs/architecture.archify.json`](docs/architecture.archify.json)) |
 | Video (máx. 5 min) | entregado en Canvas |
+| Hackathon | https://hackutec-cloud-2026-2.vercel.app/ |
+
+**Stack:** TypeScript (Node.js 22) · React + Vite · Python (FastAPI) · Serverless Framework v4 · AWS Lambda, API Gateway, DynamoDB, SQS, Step Functions, EventBridge, Secrets Manager, SNS, CloudWatch · Google Cloud Run, Vertex AI (Gemini), Workload Identity Federation.
 
 ![Arquitectura](docs/architecture.png)
 
