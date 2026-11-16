@@ -12,7 +12,7 @@ flowchart LR
 
   subgraph AWS["AWS (us-east-1) — núcleo serverless · AWS Academy LabRole"]
     direction LR
-    CF[Amazon S3 sitio web<br/>React SPA · CloudFront bloqueado en Academy]:::aws
+    CF[Lambda webApp: portal SPA<br/>HTTPS mismo origen · CSP/HSTS]:::aws
     APIGW[API Gateway HTTP API<br/>CORS restringido · throttling]:::aws
     AUTHZ[Lambda Authorizer<br/>JWT HS256]:::aws
     SM[(Secrets Manager<br/>clave maestra HKDF)]:::data
@@ -59,9 +59,9 @@ flowchart LR
     VAI[Vertex AI<br/>Gemini · JSON validado]:::gcp
   end
 
-  CIU -->|HTTPS| CF
-  OPE -->|HTTPS| CF
-  CF -. SPA llama a .-> APIGW
+  CIU -->|HTTPS| APIGW
+  OPE -->|HTTPS| APIGW
+  APIGW -->|GET / y assets| CF
   APIGW -->|/operator/* · /telemetry| AUTHZ
   AUTHZ -. GetSecretValue .-> SM
   APIGW --> LAPI

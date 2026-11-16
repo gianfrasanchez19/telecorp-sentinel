@@ -28,8 +28,8 @@ Monitoreo de antenas móviles, reportes ciudadanos e incidentes priorizados con 
   - Patrón outbox: Streams → SQS (con DLQ) → **Step Functions Standard**.
   - SQS de notificaciones → SES.
   - EventBridge (simulador cada minuto y reconciliador del outbox).
-  - **Secrets Manager**; CloudWatch (logs JSON, alarmas); frontend en sitio web S3. En cuentas que lo permitan, la IaC también soporta S3 privado + CloudFront (OAC) y X-Ray.
-  - **Verificado en la cuenta AWS Academy (2026-11-15):** CloudFront, X-Ray y SES devuelven `AccessDenied`. Por eso la configuración por defecto es `frontendMode=s3website`, `tracing=false` y correo por **SNS** (tema + suscripción confirmada + política de filtro por destinatario, técnica del taller S13).
+  - **Secrets Manager**; CloudWatch (logs JSON, alarmas). Portal **HTTPS** servido por el mismo API Gateway (Lambda `webApp`, mismo origen, CSP y HSTS). La IaC también soporta S3 privado + CloudFront (OAC), sitio web S3 y X-Ray en cuentas que lo permitan.
+  - **Verificado en la cuenta AWS Academy (2026-11-15):** CloudFront, X-Ray y SES devuelven `AccessDenied`. Por eso la configuración por defecto es `frontendMode=apigw` (el sitio S3 sería solo HTTP), `tracing=false` y correo por **SNS** (tema + suscripción confirmada + política de filtro por destinatario, técnica del taller S13).
 - **Google Cloud** (`us-central1`): Cloud Run **privado** (FastAPI, min 0) + **Vertex AI Gemini**. AWS lo invoca **sin claves** mediante **Workload Identity Federation** (el ID token lleva como audiencia la URL de Cloud Run). Existe una alternativa HMAC con protección anti-replay.
 
 Detalle: [`docs/architecture.svg`](docs/architecture.svg) · fuente Mermaid [`docs/architecture.mmd`](docs/architecture.mmd) · modelo de datos [`docs/data-model.md`](docs/data-model.md) · contrato [`contracts/openapi.yaml`](contracts/openapi.yaml).
@@ -73,7 +73,7 @@ npm run dev:web
 
 | Comando | Qué hace |
 |---|---|
-| `npm test` | 47 pruebas del backend (dominio, flujo completo, carreras, IA y WIF, límite de tasa) |
+| `npm test` | 50 pruebas del backend (dominio, flujo completo, carreras, IA y WIF, límite de tasa) |
 | `npm run demo -w backend` | Demo de aceptación: 12 escenarios medidos (9+1 usuarios, 10 simultáneos, límites, recuperación, recurrencia…) |
 | `npm run typecheck` · `npm run lint` · `npm run build` | Calidad y build (bundle Lambda ESM y SPA) |
 | `cd ai-service && python -m venv .venv && .venv/Scripts/pip install -r requirements-dev.txt && .venv/Scripts/python -m pytest` | 7 pruebas del servicio de IA |
@@ -89,15 +89,19 @@ Resultado medido en **local emulado**: 1000 reportes concurrentes; 1000 aceptado
 
 | Componente | Estado | Evidencia |
 |---|---|---|
-| AWS Academy (us-east-1), stack `telecorp-sentinel-dev` | ✅ Desplegado (95 recursos, `UPDATE_COMPLETE`) | `scripts/deploy-aws.sh` |
-| Portal (sitio web S3) + API HTTP | ✅ Funcionando; reporte enviado desde el portal publicado | Smoke test 9/9 |
-| Step Functions Standard (flujo real) | ✅ 0 ejecuciones fallidas | `docs/evidence/e2e-cloud-*.json`: 11/11 escenarios (9+1 usuarios, colectivo, antena, relación, prioridad, recuperación, estados, 409) |
-| Carga en la nube | ✅ 200/200 aceptados y procesados, 0 fallidos, convergencia en 18,6 s, p95 de ingesta 1,6 s (con arranques en frío) | `docs/evidence/load-cloud-*.json` |
-| Logs sin PII | ✅ 8401 líneas revisadas: 0 correos, 0 teléfonos, 0 campos sensibles | — |
-| Google Cloud (Cloud Run + Vertex AI) | ⏳ Pendiente de un proyecto con facturación o créditos. Mientras tanto, AWS usa el respaldo etiquetado `AI_UNAVAILABLE` | — |
+| AWS Academy (us-east-1), stack `telecorp-sentinel-dev` | ✅ Desplegado | `scripts/deploy-aws.sh` |
+| Portal **HTTPS** (SPA servida por el mismo API Gateway, CSP, HSTS, `X-Frame-Options: DENY`) | ✅ | Reporte enviado desde el portal publicado; prueba `test/web.test.ts` |
+| Google Cloud: Cloud Run **privado** (us-central1, min 0 / max 2) + Vertex AI `gemini-3.5-flash-lite` (endpoint global) | ✅ Desplegado | Anónimo → 403; identidad no invocadora → 401 |
+| AWS → GCP con **Workload Identity Federation** (solo `assumed-role/LabRole`, sin claves) | ✅ | Otro rol AWS → "rejected by the attribute condition" |
+| **E2E multinube** (Step Functions → Cloud Run → Gemini) | ✅ 12/12; 0 ejecuciones fallidas | `docs/evidence/e2e-cloud-*.json` (incluye una muestra del análisis real de Gemini) |
+| Carga en la nube | ✅ 200/200 aceptados y procesados, 0 fallidos, convergencia 18,6 s | `docs/evidence/load-cloud-*.json` |
+| Logs sin PII (CloudWatch y Cloud Run) | ✅ 0 correos, 0 teléfonos, 0 campos sensibles | — |
 | Correo (SNS) | ⏳ Desplegado sin suscriptor; se activa con `NOTIFY_EMAIL=<correo>` | — |
 
-Problema corregido gracias a la prueba en la nube: SQS estándar entregaba lecturas de telemetría fuera de orden, y una lectura tardía se ignoraba, lo que impedía completar las 3 normales consecutivas de la recuperación. Ahora las rachas se recalculan en orden temporal, sin retroceder el estado actual (prueba `entregas fuera de orden`).
+**Errores reales que encontraron las pruebas en la nube (ya corregidos):**
+1. **Lecturas de telemetría fuera de orden** (SQS estándar): una lectura tardía se ignoraba y la recuperación (3 lecturas normales consecutivas) nunca se disparaba. Ahora las rachas se recalculan en orden temporal, sin retroceder el estado.
+2. **WIF:** Google STS rechazaba el token de AWS si incluía la cabecera `x-amz-content-sha256`, que el firmador SigV4 añade por defecto. Ahora se firma sin ella (`applyChecksum: false`) y una prueba lo fija.
+3. **Gemini:** en este proyecto, los modelos responden 404 en `us-central1` y funcionan en el endpoint `global`. El modelo y la ubicación se configuran por variables y se verifican con `ai-service/scripts/check_model.py`.
 
 ## Despliegue real (manual, con tu autorización)
 
@@ -118,7 +122,7 @@ GCP_PROJECT_ID=<proyecto> bash infra/gcp/check-gcp.sh
 1. `gcloud auth login` y `gcloud auth application-default login`. El proyecto necesita facturación o créditos.
 2. Elige un modelo Gemini disponible en tu región (Vertex AI → Model Garden) y verifícalo:
    ```bash
-   GOOGLE_CLOUD_PROJECT=<proyecto> VERTEX_LOCATION=us-central1 GEMINI_MODEL=<modelo> python ai-service/scripts/check_model.py
+   GOOGLE_CLOUD_PROJECT=<proyecto> VERTEX_LOCATION=global GEMINI_MODEL=<modelo> python ai-service/scripts/check_model.py
    ```
 3. Despliega (crea Cloud Run privado, cuentas de servicio y el pool WIF limitado a `assumed-role/LabRole` de tu cuenta):
    ```bash
@@ -144,7 +148,7 @@ Si `check-aws-services.sh` indica que falta un servicio:
 
 | Falta | Ajuste |
 |---|---|
-| CloudFront | `FRONTEND_MODE=s3website` (por defecto) o `none` y frontend local con `VITE_API_BASE_URL=<HttpApiUrl>` |
+| CloudFront | `FRONTEND_MODE=apigw` (por defecto: HTTPS por API Gateway), `s3website` (solo HTTP) o `none` |
 | X-Ray | `TRACING=false` (por defecto) |
 | Scheduler | `scheduleKind=rule` (valor por defecto) |
 | SES | Correo por SNS (por defecto si `SES_FROM_EMAIL` está vacío) |
@@ -173,9 +177,10 @@ Supuestos: demo de unas 3 h con el simulador encendido (14 antenas/min), unos 20
 | DynamoDB on-demand + PITR | Por escritura, lectura y GB | < 1 USD |
 | Secrets Manager | 0,40 USD/secreto/mes (prorrateado) + llamadas (con caché de 5 min) | ~0,40 USD/mes |
 | CloudWatch | 7 alarmas × 0,10 USD/mes + logs (retención 14 días) | ~1 USD/mes |
-| S3 (sitio web) / SNS correo | Capa gratuita (las primeras 1000 notificaciones por correo de SNS al mes son gratis) | ~0 USD |
+| Lambda `webApp` (portal) / SNS correo | Capa gratuita (las primeras 1000 notificaciones por correo de SNS al mes son gratis) | ~0 USD |
+| Cloud Build / Artifact Registry | Una compilación (capa gratuita) e imagen de ~200 MB | ~0,02 USD/mes |
 | Cloud Run | min 0 ⇒ sin coste en reposo; por vCPU-segundo cuando atiende | ~0 USD |
-| Vertex AI Gemini | Por tokens: unos 1000 tokens por análisis, con caché por hash y solo ante cambios materiales | Céntimos a unos pocos USD |
+| Vertex AI `gemini-3.5-flash-lite` | Medido: ~815 tokens de entrada y ~275 de salida por análisis; caché por hash y solo ante cambios materiales | ~0,0002 USD por análisis |
 
 Controles: el simulador está **apagado por defecto**; `maximumConcurrency` de SQS es 5 y 2; Cloud Run tiene `max-instances=2`; los logs se retienen 14 días; la IA solo se invoca ante cambios materiales y con caché. Configura un presupuesto o alerta en GCP (Billing → Budgets). **Los presupuestos alertan, no son topes.**
 
@@ -188,10 +193,9 @@ Controles: el simulador está **apagado por defecto**; `maximumConcurrency` de S
 
 ## Limitaciones conocidas (honestas)
 
-- AWS ya está desplegado y verificado. Queda pendiente la evidencia de **Google Cloud** (Cloud Run + Gemini real) y del correo con un suscriptor confirmado.
+- AWS y Google Cloud están desplegados y verificados de punta a punta. Solo falta la evidencia del correo con un suscriptor confirmado (opcional).
 - La alta disponibilidad es Multi-AZ dentro de **una** región. No hay réplica multirregión ni multinube de los datos.
-- En el sitio web S3, las rutas profundas (p. ej. `/reportar`) devuelven HTTP 404 con el contenido de la SPA, que funciona igual en el navegador; es la limitación habitual de S3 sin CloudFront.
-- El sitio web S3 se sirve por HTTP, porque AWS Academy bloquea CloudFront. La API sí es HTTPS y los datos sensibles nunca se guardan en el navegador. En una cuenta normal, `FRONTEND_MODE=cloudfront` da HTTPS con S3 privado.
+- El portal se sirve por API Gateway: cada recurso estático es una invocación de Lambda (con caché `immutable` en `/assets`). Suficiente para la demo; en producción iría por CloudFront.
 - La caché de nonces del modo HMAC es por instancia (por eso ese modo usa `max-instances=1`).
 - No se pudieron abrir algunos materiales de Canvas (ver [`docs/course-coverage.md`](docs/course-coverage.md)).
 

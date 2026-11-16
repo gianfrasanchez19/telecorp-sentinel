@@ -39,5 +39,14 @@ Marcas: ✅ verificado · ⚠️ no verificable (no se pudo abrir) · ➕ requis
 | Cognito no disponible | Taller S10-1 ✅ | JWT propio con clave en Secrets Manager |
 | Las credenciales del laboratorio duran 4 h | Taller S10-2 ✅ | `deploy-aws.sh` verifica la identidad antes de desplegar; la autenticación AWS→GCP usa el rol, no credenciales de usuario |
 | Región us-east-1 | Ejemplos del curso ✅ | Región por defecto `us-east-1` |
-| CloudFront, X-Ray y SES | **Verificado en la cuenta (2026-11-15) con `scripts/check-aws-services.sh`: `AccessDenied`** | Frontend en **sitio web S3** (taller S5), `tracing=false` y correo por **SNS** con suscripción y política de filtro (taller S13). La IaC con CloudFront, X-Ray y SES se conserva para cuentas normales |
+| CloudFront, X-Ray y SES | **Verificado en la cuenta (2026-11-15) con `scripts/check-aws-services.sh`: `AccessDenied`** | Portal **HTTPS** servido por API Gateway + Lambda (el sitio web S3 del taller S5 queda como alternativa, solo HTTP), `tracing=false` y correo por **SNS** con suscripción y política de filtro (taller S13). La IaC con CloudFront, X-Ray y SES se conserva para cuentas normales |
 | EventBridge Scheduler, Lambda, API Gateway v2, DynamoDB, SQS, Step Functions, Secrets Manager, CloudFormation, S3, SNS, CloudWatch | ✅ Verificado en la cuenta | Se usan. LabRole confía en `lambda`, `states` y `scheduler`. Concurrencia de Lambda de la cuenta: 1000 |
+
+## Google Cloud (verificado el 2026-11-15 con el proyecto del grupo)
+
+| Verificación | Resultado | Decisión |
+|---|---|---|
+| Facturación | Habilitada con créditos de prueba | Solo recursos que escalan a cero; alerta de presupuesto recomendada |
+| Gemini en `us-central1` | 404 para todos los modelos probados | Usar el endpoint **`global`** (`VERTEX_LOCATION=global`) |
+| Modelo | `gemini-3.5-flash-lite` responde (el lite más barato disponible) | `GEMINI_MODEL` configurable |
+| `gcloud` en Git Bash (Windows) | El wrapper bash falla por las rutas | `infra/gcp/_gcloud-shim.sh` usa el Python incluido en el SDK |

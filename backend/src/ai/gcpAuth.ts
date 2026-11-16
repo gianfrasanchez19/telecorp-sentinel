@@ -33,7 +33,9 @@ export function wifAudience(c: WifConfig): string {
 /** Construye el "subject token" serializado según el formato que espera Google STS. */
 export async function buildAwsSubjectToken(c: WifConfig, fetchCreds = defaultProvider()): Promise<string> {
   const host = `sts.${c.awsRegion}.amazonaws.com`;
-  const signer = new SignatureV4({ credentials: fetchCreds, region: c.awsRegion, service: 'sts', sha256: Sha256 });
+  // applyChecksum=false: Google STS rechaza la solicitud si incluye x-amz-content-sha256
+  // ("doesn't contain all the required headers"); verificado contra sts.googleapis.com.
+  const signer = new SignatureV4({ credentials: fetchCreds, region: c.awsRegion, service: 'sts', sha256: Sha256, applyChecksum: false });
   const signed = await signer.sign({
     method: 'POST',
     protocol: 'https:',
@@ -63,7 +65,11 @@ export async function getCloudRunIdToken(c: WifConfig, fetchImpl: typeof fetch =
     }),
     signal: AbortSignal.timeout(5000),
   });
-  if (!stsRes.ok) throw new Error(`Google STS rechazó el intercambio (${stsRes.status})`);
+  if (!stsRes.ok) {
+    // Sólo se registra el código de error de Google (no contiene credenciales).
+    const err = (await stsRes.json().catch(() => ({}))) as { error?: string };
+    throw new Error(`Google STS rechazó el intercambio (${stsRes.status} ${err.error ?? ''})`.trim());
+  }
   const { access_token } = (await stsRes.json()) as { access_token: string };
   const idRes = await fetchImpl(`https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${encodeURIComponent(c.serviceAccountEmail)}:generateIdToken`, {
     method: 'POST',

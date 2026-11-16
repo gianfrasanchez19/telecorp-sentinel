@@ -45,7 +45,7 @@
   <text x="218" y="108" font-size="15" font-weight="bold" fill="#b35c00">AWS · us-east-1 · cuenta AWS Academy (rol LabRole) · Serverless Framework v4 / CloudFormation</text>
 
   <!-- Fila A: borde / API / seguridad -->
-  <rect x="230" y="124" width="180" height="70" rx="8" class="node"/><text x="320" y="146" text-anchor="middle" class="t">Amazon S3 (sitio web)</text><text x="320" y="163" text-anchor="middle" class="s">SPA React (portal + consola)</text><text x="320" y="179" text-anchor="middle" class="xs">Academy bloquea CloudFront (IaC lista)</text>
+  <rect x="230" y="124" width="180" height="70" rx="8" class="node"/><text x="320" y="146" text-anchor="middle" class="t">λ webApp (portal SPA)</text><text x="320" y="163" text-anchor="middle" class="s">HTTPS · CSP · HSTS</text><text x="320" y="179" text-anchor="middle" class="xs">CloudFront bloqueado en Academy</text>
   <rect x="450" y="124" width="190" height="70" rx="8" class="node"/><text x="545" y="146" text-anchor="middle" class="t">API Gateway HTTP API</text><text x="545" y="163" text-anchor="middle" class="s">rutas validadas · CORS restringido</text><text x="545" y="179" text-anchor="middle" class="s">throttling 50 rps / ráfaga 100</text>
   <rect x="680" y="124" width="180" height="70" rx="8" class="sec"/><text x="770" y="146" text-anchor="middle" class="t">Lambda Authorizer</text><text x="770" y="163" text-anchor="middle" class="s">JWT HS256 · roles y expiración</text><text x="770" y="179" text-anchor="middle" class="xs">(Cognito no disponible en Academy)</text>
   <rect x="900" y="124" width="250" height="70" rx="8" class="sec"/><text x="1025" y="146" text-anchor="middle" class="t">AWS Secrets Manager</text><text x="1025" y="163" text-anchor="middle" class="s">clave maestra generada por AWS → HKDF:</text><text x="1025" y="179" text-anchor="middle" class="s">JWT · HMAC seudónimos · AES-GCM PII · tokens</text>
@@ -112,7 +112,7 @@
   <!-- Flechas principales -->
   <path class="e" d="M170,148 H228"/>
   <path class="e" d="M170,228 H200 V160 H228"/>
-  <path class="e" d="M410,159 H448"/><text x="414" y="152" class="xs">SPA→API</text>
+  <path class="e" d="M410,159 H448"/>
   <path class="e" d="M170,308 H440 V196"/>
   <path class="e" d="M640,150 H678"/>
   <path class="ed" d="M860,150 H898"/>

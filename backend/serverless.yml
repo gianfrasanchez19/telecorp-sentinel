@@ -39,7 +39,7 @@ params:
     lambdaTracing: PassThrough # Active (requiere X-Ray) | PassThrough
     architecture: arm64 # arm64 (más barato) | x86_64
     alertEmail: ''
-    frontendMode: s3website # s3website (AWS Academy: CloudFront bloqueado) | cloudfront (S3 privado + OAC) | none
+    frontendMode: apigw # apigw (SPA por API Gateway HTTPS, recomendado en Academy) | s3website (HTTP) | cloudfront (S3 privado + OAC) | none
     eventsMaxConcurrency: '5'
     notificationsMaxConcurrency: '2'
     apiBurst: '100'
@@ -105,8 +105,19 @@ package:
   patterns:
     - '!**'
     - dist/lambda/**
+    - dist/web/**
 
 functions:
+  # ---------- Portal (SPA) por el mismo API Gateway HTTPS: TLS, mismo origen y CSP ----------
+  webApp:
+    handler: dist/lambda/handlers.webApp
+    description: Sirve la SPA con cabeceras de seguridad (CloudFront está bloqueado en AWS Academy)
+    memorySize: 256
+    timeout: 5
+    events:
+      - httpApi: 'GET /'
+      - httpApi: 'GET /{proxy+}'
+
   # ---------- API Gateway HTTP API ----------
   publicApi:
     handler: dist/lambda/handlers.publicApi

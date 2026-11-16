@@ -21,6 +21,9 @@ const login = await call<{ token: string }>('/auth/login', { method: 'POST', bod
 const T = login.token;
 const ZONE = process.env.E2E_ZONE ?? 'Z-CSU';
 const ANT = process.env.E2E_ANTENNA ?? 'ANT-CSU-01';
+// Familia sin datos previos en la ventana de 24 h (p. ej. tras una prueba de carga use SMS_NO_LLEGAN).
+const PROBLEM = process.env.E2E_PROBLEM ?? 'SIN_DATOS_MOVILES';
+const FAMILY = PROBLEM === 'SMS_NO_LLEGAN' ? 'MENSAJERIA' : 'CONECTIVIDAD';
 const scenario = (scenario: string, params: Record<string, unknown>) => call<Record<string, unknown>>('/operator/simulator/scenarios', { method: 'POST', body: JSON.stringify({ scenario, params }) }, T);
 
 /**
@@ -46,23 +49,24 @@ async function settle(label: string, expectedNew: number, timeoutMs = 300_000) {
   throw new Error(`Timeout esperando convergencia (${label})`);
 }
 
-type Inc = { incidentId: string; kind: string; zoneId: string; uniqueReporters: number; reportCount: number; investigationPending: boolean; relatedIncidentIds: string[]; status: string; priority?: { level: string; score: number }; ai?: { source: string }; recovery?: { pendingVerification: boolean }; antennaIds: string[] };
+type Inc = { incidentId: string; kind: string; zoneId: string; family?: string; uniqueReporters: number; reportCount: number; investigationPending: boolean; relatedIncidentIds: string[]; status: string; priority?: { level: string; score: number }; ai?: { source: string }; recovery?: { pendingVerification: boolean }; antennaIds: string[] };
 await settle('inicio', 0);
 const incidents = () => call<Inc[]>('/operator/incidents', {}, T);
 const rows: { escenario: string; esperado: string; obtenido: string; ok: boolean }[] = [];
 const check = (escenario: string, esperado: string, obtenido: unknown, ok: boolean) => rows.push({ escenario, esperado, obtenido: String(obtenido), ok });
 const timings: unknown[] = [];
+let aiSample: Record<string, unknown> | undefined;
 
 // 1) 9 usuarios distintos + 1 repetido (Centro Cívico) => sin colectivo
-await scenario('reportes-usuarios', { zoneId: ZONE, count: 9, startIndex: base, repeatIndex: base + 3, problemType: 'SIN_DATOS_MOVILES' });
+await scenario('reportes-usuarios', { zoneId: ZONE, count: 9, startIndex: base, repeatIndex: base + 3, problemType: PROBLEM });
 timings.push(await settle('9+1', 10));
-let coll = (await incidents()).filter((i) => i.kind === 'COLECTIVO' && i.zoneId === ZONE);
+let coll = (await incidents()).filter((i) => i.kind === 'COLECTIVO' && i.zoneId === ZONE && i.family === FAMILY);
 check('9 usuarios + 1 repetido', 'sin colectivo', coll.length, coll.length === 0);
 
 // 2) décimo usuario distinto => exactamente un colectivo
-await scenario('reportes-usuarios', { zoneId: ZONE, count: 1, startIndex: base + 9, problemType: 'SIN_DATOS_MOVILES' });
+await scenario('reportes-usuarios', { zoneId: ZONE, count: 1, startIndex: base + 9, problemType: PROBLEM });
 timings.push(await settle('10.º', 1));
-coll = (await incidents()).filter((i) => i.kind === 'COLECTIVO' && i.zoneId === ZONE);
+coll = (await incidents()).filter((i) => i.kind === 'COLECTIVO' && i.zoneId === ZONE && i.family === FAMILY);
 check('Décimo usuario distinto', '1 colectivo, 10 reportantes', `${coll.length} / ${coll[0]?.uniqueReporters}`, coll.length === 1 && coll[0].uniqueReporters === 10);
 check('Colectivo con antenas normales', 'investigación pendiente', coll[0]?.investigationPending, coll[0]?.investigationPending === true);
 
@@ -71,11 +75,18 @@ await scenario('antena-inhabilitada', { antennaId: ANT, minutes: 5 });
 timings.push(await settle('antena', 1));
 const all = await incidents();
 const infra = all.filter((i) => i.kind === 'INFRAESTRUCTURA' && i.antennaIds[0] === ANT);
-coll = all.filter((i) => i.kind === 'COLECTIVO' && i.zoneId === ZONE);
+coll = all.filter((i) => i.kind === 'COLECTIVO' && i.zoneId === ZONE && i.family === FAMILY);
 check('Antena inhabilitada', '1 incidente de infraestructura', infra.length, infra.length === 1);
 check('Relación colectivo↔infraestructura', 'relacionados, usuarios sin duplicar (10)', `${coll[0]?.relatedIncidentIds.length} rel · ${coll[0]?.uniqueReporters} usuarios`, (coll[0]?.relatedIncidentIds.length ?? 0) >= 1 && coll[0]?.uniqueReporters === 10);
 check('Prioridad determinista', 'calculada y explicable', `${infra[0]?.priority?.level} ${infra[0]?.priority?.score}`, !!infra[0]?.priority);
-check('IA', 'respaldo etiquetado (GCP aún no desplegado)', infra[0]?.ai?.source, infra[0]?.ai?.source === 'AI_UNAVAILABLE');
+const EXPECT_AI = process.env.E2E_EXPECT_AI ?? 'VERTEX_AI_GEMINI';
+check('IA (AWS Step Functions -> GCP Cloud Run -> Vertex AI)', EXPECT_AI, infra[0]?.ai?.source, infra[0]?.ai?.source === EXPECT_AI);
+if (infra[0]) {
+  const det = await call<{ aiAnalyses: { source: string; model?: string; latencyMs?: number; summary: string; probableCauses: string[]; recommendedActions: string[]; uncertainties: string[] }[] }>(`/operator/incidents/${infra[0].incidentId}`, {}, T);
+  const a = det.aiAnalyses.find((x) => x.source === 'VERTEX_AI_GEMINI') ?? det.aiAnalyses[0];
+  aiSample = a ? { source: a.source, model: a.model, latencyMs: a.latencyMs, summary: a.summary, probableCauses: a.probableCauses, recommendedActions: a.recommendedActions, uncertainties: a.uncertainties } : undefined;
+  check('Salida IA validada', 'resumen + causas + acciones + incertidumbres', a ? `${a.model} · ${a.latencyMs ?? '?'} ms` : 'sin análisis', !!a && !!a.summary && a.probableCauses.length > 0 && a.recommendedActions.length > 0 && a.uncertainties.length > 0);
+}
 
 // 4) recuperación técnica => pendiente de verificación (no se cierra solo)
 await scenario('recuperar', { antennaId: ANT });
@@ -102,7 +113,7 @@ check('Ejecuciones Step Functions', '0 FALLIDO, 0 pendientes', JSON.stringify(fi
 
 console.table(rows.map((r) => ({ '': r.ok ? '✅' : '❌', escenario: r.escenario, esperado: r.esperado, obtenido: r.obtenido })));
 const failed = rows.filter((r) => !r.ok).length;
-const report = { api: API, runId, at: new Date().toISOString(), environment: 'AWS (cuenta AWS Academy, us-east-1)', results: rows, convergence: timings, failed };
+const report = { api: API, runId, at: new Date().toISOString(), environment: 'AWS Academy us-east-1 + Google Cloud (Cloud Run us-central1, Vertex AI global)', results: rows, convergence: timings, aiSample, failed };
 mkdirSync('docs/evidence', { recursive: true });
 writeFileSync(`docs/evidence/e2e-cloud-${runId}.json`, JSON.stringify(report, null, 2).replace(/https:\/\/[a-z0-9]+\.execute-api/g, 'https://<api-id>.execute-api'));
 console.log(failed ? `${failed} verificación(es) fallaron` : 'Todas las verificaciones E2E en la nube se cumplieron.', `Evidencia: docs/evidence/e2e-cloud-${runId}.json`);

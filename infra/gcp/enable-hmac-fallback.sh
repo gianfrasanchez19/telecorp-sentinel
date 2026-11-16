@@ -6,6 +6,8 @@
 #   y acceso público a nivel de red: la autenticación la hace la firma HMAC.
 # Luego desplegar el backend con aiAuthMode=hmac.
 set -euo pipefail
+# shellcheck source=/dev/null
+source "$(dirname "$0")/_gcloud-shim.sh"
 : "${GCP_PROJECT_ID:?}"; : "${AWS_SECRET_ID:?Defina AWS_SECRET_ID (p. ej. telecorp-sentinel/dev/app)}"
 REGION="${GCP_REGION:-us-central1}"; SERVICE="${SERVICE_NAME:-telecorp-ai}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

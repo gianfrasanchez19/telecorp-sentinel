@@ -4,7 +4,7 @@
  * empaqueta ese artefacto (build integrado desactivado para controlar el formato ESM).
  */
 import { build } from 'esbuild';
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 
 rmSync('dist/lambda', { recursive: true, force: true });
 await build({
@@ -55,3 +55,12 @@ if (parts.some((p) => typeof p === 'string' && p.includes('${'))) throw new Erro
 mkdirSync('dist', { recursive: true });
 writeFileSync('dist/statemachine-definition.json', JSON.stringify({ 'Fn::Join': ['', parts] }, null, 1));
 console.log(`dist/statemachine-definition.json (${Object.keys(fnFor).length} tareas Lambda)`);
+
+// Portal: copia el build del frontend (si existe) para servirlo desde la Lambda webApp.
+rmSync('dist/web', { recursive: true, force: true });
+if (existsSync('../frontend/dist/index.html')) {
+  cpSync('../frontend/dist', 'dist/web', { recursive: true });
+  console.log('dist/web (frontend empaquetado para webApp)');
+} else {
+  console.log('dist/web omitido: ejecute primero el build del frontend (npm run build -w frontend)');
+}

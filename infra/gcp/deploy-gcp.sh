@@ -9,13 +9,16 @@
 #     bash infra/gcp/deploy-gcp.sh
 # Variables opcionales: GCP_REGION (us-central1), VERTEX_LOCATION (us-central1),
 #   AWS_ROLE_NAME (LabRole), AI_MAX_INSTANCES (2), SERVICE_NAME (telecorp-ai), ASSUME_YES=1
+# Modelo verificado en el proyecto del grupo (2026-11-15): GEMINI_MODEL=gemini-3.5-flash-lite, VERTEX_LOCATION=global
 set -euo pipefail
+# shellcheck source=/dev/null
+source "$(dirname "$0")/_gcloud-shim.sh"
 
 : "${GCP_PROJECT_ID:?Defina GCP_PROJECT_ID}"
 : "${AWS_ACCOUNT_ID:?Defina AWS_ACCOUNT_ID (12 dígitos de la cuenta AWS / AWS Academy)}"
 : "${GEMINI_MODEL:?Defina GEMINI_MODEL con un modelo disponible (verifíquelo con ai-service/scripts/check_model.py)}"
 REGION="${GCP_REGION:-us-central1}"
-VERTEX_LOCATION="${VERTEX_LOCATION:-$REGION}"
+VERTEX_LOCATION="${VERTEX_LOCATION:-global}" # verificado: Gemini responde en el endpoint global
 AWS_ROLE_NAME="${AWS_ROLE_NAME:-LabRole}"
 MAX_INSTANCES="${AI_MAX_INSTANCES:-2}"
 SERVICE="${SERVICE_NAME:-telecorp-ai}"
@@ -23,7 +26,8 @@ POOL="telecorp-aws-pool"
 PROVIDER="telecorp-aws-provider"
 RUNTIME_SA="telecorp-ai-runtime@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
 INVOKER_SA="telecorp-ai-invoker@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# En Git Bash (Windows) gcloud necesita rutas Windows (C:/...): pwd -W; en Linux/macOS, pwd.
+ROOT="$(cd "$(dirname "$0")/../.." && (pwd -W 2>/dev/null || pwd))"
 
 echo "== Verificación de identidad (no se muestran credenciales)"
 ACCOUNT="$(gcloud config get-value account 2>/dev/null)"
@@ -39,7 +43,7 @@ fi
 
 gcloud config set project "$GCP_PROJECT_ID" >/dev/null
 echo "== Habilitando APIs"
-gcloud services enable run.googleapis.com aiplatform.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
+gcloud services enable run.googleapis.com aiplatform.googleapis.com compute.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
   iam.googleapis.com iamcredentials.googleapis.com sts.googleapis.com secretmanager.googleapis.com
 
 echo "== Cuentas de servicio (mínimo privilegio)"
@@ -47,8 +51,13 @@ gcloud iam service-accounts describe "$RUNTIME_SA" >/dev/null 2>&1 || gcloud iam
 gcloud iam service-accounts describe "$INVOKER_SA" >/dev/null 2>&1 || gcloud iam service-accounts create telecorp-ai-invoker --display-name "TeleCorp AI invoker (AWS via WIF)"
 gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" --member "serviceAccount:$RUNTIME_SA" --role roles/aiplatform.user --condition=None >/dev/null
 
+echo "== Permisos de compilación (Cloud Run desde código fuente usa la cuenta de servicio por defecto de Compute)"
+gcloud services enable compute.googleapis.com >/dev/null
+BUILD_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" --member "serviceAccount:$BUILD_SA" --role roles/run.builder --condition=None >/dev/null
+
 echo "== Desplegando Cloud Run (privado)"
-gcloud run deploy "$SERVICE" --source "$ROOT/ai-service" --region "$REGION" \
+gcloud run deploy "$SERVICE" --source "$ROOT/ai-service" --region "$REGION" --quiet \
   --no-allow-unauthenticated --service-account "$RUNTIME_SA" \
   --min-instances 0 --max-instances "$MAX_INSTANCES" --concurrency 20 --cpu 1 --memory 512Mi --timeout 30 \
   --set-env-vars "GOOGLE_CLOUD_PROJECT=$GCP_PROJECT_ID,VERTEX_LOCATION=$VERTEX_LOCATION,GEMINI_MODEL=$GEMINI_MODEL,AUTH_MODE=iam,ALLOWED_INVOKER=$INVOKER_SA"

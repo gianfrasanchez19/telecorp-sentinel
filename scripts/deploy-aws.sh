@@ -7,7 +7,8 @@
 #
 # Variables (opcionales):
 #   STAGE=dev  AWS_REGION=us-east-1  LAB_ROLE_ARN=(por defecto arn:aws:iam::<cuenta>:role/LabRole)
-#   FRONTEND_MODE=s3website|cloudfront|none   (AWS Academy bloquea CloudFront => s3website)
+#   FRONTEND_MODE=apigw|s3website|cloudfront|none  (apigw: SPA por el mismo API Gateway HTTPS con CSP/HSTS;
+#                  recomendado en AWS Academy, donde CloudFront está bloqueado y el sitio S3 sería sólo HTTP)
 #   NOTIFY_EMAIL=<correo de prueba>  => se suscribe al tema SNS (confirmar el correo de AWS) y queda en la lista permitida
 #   SES_FROM_EMAIL=<identidad verificada>  (sólo en cuentas con SES; en Academy está bloqueado)
 #   AI_SERVICE_URL, GCP_PROJECT_NUMBER, GCP_INVOKER_SA, AI_AUTH_MODE=wif  (salida de infra/gcp/deploy-gcp.sh)
@@ -16,8 +17,17 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAGE="${STAGE:-dev}"
+# Configuración NO secreta recordada entre despliegues (URL de Cloud Run, proyecto, SA, modo
+# del frontend...) en .local/ (ignorado por git): evita desactivar la IA por olvidar un parámetro.
+CONF="$ROOT/.local/deploy-$STAGE.env"
+if [ -f "$CONF" ]; then
+  while IFS='=' read -r k v; do
+    [[ "$k" =~ ^[A-Z_]+$ ]] || continue
+    [ -z "${!k:-}" ] && export "$k=$v"
+  done < "$CONF"
+fi
 REGION="${AWS_REGION:-us-east-1}"
-FRONTEND_MODE="${FRONTEND_MODE:-s3website}"
+FRONTEND_MODE="${FRONTEND_MODE:-apigw}"
 export AWS_REGION="$REGION" AWS_DEFAULT_REGION="$REGION"
 
 command -v aws >/dev/null || { echo "Instale AWS CLI v2"; exit 1; }
@@ -33,8 +43,13 @@ if [ "${ASSUME_YES:-0}" != "1" ]; then
   [ "$ok" = "si" ] || { echo "Cancelado."; exit 1; }
 fi
 
-echo "== Build backend"
-( cd "$ROOT" && npm ci --no-audit --no-fund >/dev/null && npm run build -w backend >/dev/null )
+echo "== Build"
+( cd "$ROOT" && npm ci --no-audit --no-fund >/dev/null )
+if [ "$FRONTEND_MODE" = "apigw" ]; then
+  # Mismo origen que la API => base URL vacía (rutas relativas); el build del backend lo empaqueta en dist/web.
+  ( cd "$ROOT/frontend" && VITE_API_BASE_URL="" npm run build >/dev/null )
+fi
+( cd "$ROOT" && npm run build -w backend >/dev/null )
 
 STACK="telecorp-sentinel-$STAGE"
 out() { aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text 2>/dev/null || true; }
@@ -53,13 +68,24 @@ deploy() {
   ( cd "$ROOT/backend" && npx serverless deploy --stage "$STAGE" --region "$REGION" "${args[@]}" < /dev/null )
 }
 
+# Si se cambia de modo, CloudFormation no puede borrar un bucket con objetos: vaciarlo antes.
+OLD_BUCKET="$(out WebsiteBucket)"
+if [ "$FRONTEND_MODE" != "s3website" ] && [ -n "$OLD_BUCKET" ] && [ "$OLD_BUCKET" != "None" ]; then
+  echo "== Vaciando el sitio web S3 anterior ($OLD_BUCKET) para retirarlo"
+  aws s3 rm "s3://$OLD_BUCKET" --recursive --region "$REGION" >/dev/null || true
+  CORS="http://localhost:5173"
+fi
+
 echo "== Serverless deploy"
 deploy "$CORS"
 API_URL="$(out HttpApiUrl)"
 echo "API: $API_URL"
 
 SITE=""
-if [ "$FRONTEND_MODE" = "s3website" ]; then
+if [ "$FRONTEND_MODE" = "apigw" ]; then
+  SITE="$API_URL"
+  echo "== Portal servido por API Gateway (HTTPS, mismo origen): $SITE/"
+elif [ "$FRONTEND_MODE" = "s3website" ]; then
   BUCKET="$(out WebsiteBucket)"; SITE="$(out WebsiteUrl)"
   echo "== Frontend -> sitio web S3 ($SITE)"
   ( cd "$ROOT/frontend" && VITE_API_BASE_URL="$API_URL" npm run build >/dev/null )
@@ -75,6 +101,15 @@ if [ -n "$SITE" ] && [ "$SITE" != "$CORS" ]; then
   echo "== Segunda pasada: CORS restringido al origen del frontend ($SITE)"
   deploy "$SITE"
 fi
+
+mkdir -p "$ROOT/.local"
+[ -n "$SITE" ] && CORS_ORIGINS="${SITE%/}"   # próximos despliegues: una sola pasada
+{
+  for k in CORS_ORIGINS FRONTEND_MODE AI_SERVICE_URL AI_AUTH_MODE GCP_PROJECT_NUMBER GCP_INVOKER_SA NOTIFY_EMAIL SES_FROM_EMAIL ALERT_EMAIL SCHEDULE_KIND TRACING; do
+    [ -n "${!k:-}" ] && echo "$k=${!k}"
+  done
+} > "$CONF"
+echo "Configuración no secreta guardada en .local/deploy-$STAGE.env (ignorado por git)."
 
 echo
 echo "Portal: ${SITE:-(frontend local: VITE_API_BASE_URL=$API_URL npm run dev:web)}"

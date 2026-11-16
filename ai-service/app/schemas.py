@@ -20,7 +20,7 @@ class IncidentContext(BaseModel):
     uniqueReporters: Any = None
     reportCount: Any = None
     estimatedUsersCatalog: int | None = None
-    antennas: int | None = None
+    antennasConsidered: int | None = None
     worstAntennaStatus: str | None = None
     currentAntennaStatus: str | None = None
     recoveryDetected: bool | None = None

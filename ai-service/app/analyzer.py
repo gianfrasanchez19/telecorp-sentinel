@@ -23,8 +23,9 @@ Reglas obligatorias:
 2. No inventes hechos: usa únicamente los datos recibidos. Distingue hechos de hipótesis; las causas son HIPÓTESIS.
 3. La correlación entre reportes y antenas no prueba causalidad; dilo cuando aplique.
 4. No solicites ni produzcas datos personales.
-5. Responde en español, conciso y accionable para un operador.
-6. Devuelve exclusivamente JSON con las claves: summary, probableCauses, recommendedActions, uncertainties, relatedProblemType."""
+5. "antennasConsidered" es el número de antenas vinculadas o candidatas de la zona; "worstAntennaStatus" es el peor estado de AL MENOS UNA de ellas. No asumas que todas están en ese estado.
+6. Responde en español, conciso y accionable para un operador.
+7. Devuelve exclusivamente JSON con las claves: summary, probableCauses, recommendedActions, uncertainties, relatedProblemType."""
 
 _PII_PATTERNS = [
     (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[CORREO]"),

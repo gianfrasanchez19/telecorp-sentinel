@@ -23,8 +23,8 @@ export function buildAiContext(m: IncidentMeta, sampleDescriptions: string[], pr
       uniqueReporters: m.uniqueReporters,
       reportCount: m.reportCount,
       estimatedUsersCatalog: m.estimatedUsers,
-      antennas: m.antennaIds.length,
-      worstAntennaStatus: m.worstAntennaStatus ?? null,
+      antennasConsidered: m.antennaIds.length, // antenas vinculadas o candidatas de la zona (NO todas anómalas)
+      worstAntennaStatus: m.worstAntennaStatus ?? null, // peor estado observado en AL MENOS UNA antena
       currentAntennaStatus: m.currentAntennaStatus ?? null,
       recoveryDetected: !!m.recovery,
       investigationPending: m.investigationPending,

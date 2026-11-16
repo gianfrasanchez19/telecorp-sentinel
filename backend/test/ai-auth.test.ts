@@ -17,6 +17,8 @@ describe('Workload Identity Federation AWS -> GCP', () => {
     expect(h['x-goog-cloud-target-resource']).toBe(wifAudience(cfg));
     expect(h.authorization).toMatch(/^AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE\/\d{8}\/us-east-1\/sts\/aws4_request/);
     expect(h['x-amz-security-token']).toBe('token-de-sesion');
+    // Google STS rechaza el token si incluye esta cabecera (comprobado en la nube real).
+    expect(h['x-amz-content-sha256']).toBeUndefined();
   });
 
   it('intercambia en Google STS y pide un ID token con audiencia = URL de Cloud Run', async () => {

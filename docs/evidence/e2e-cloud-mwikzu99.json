@@ -1,0 +1,142 @@
+{
+  "api": "https://<api-id>.execute-api.us-east-1.amazonaws.com",
+  "runId": "mwikzu99",
+  "at": "2026-11-16T01:26:50.442Z",
+  "environment": "AWS Academy us-east-1 + Google Cloud (Cloud Run us-central1, Vertex AI global)",
+  "results": [
+    {
+      "escenario": "9 usuarios + 1 repetido",
+      "esperado": "sin colectivo",
+      "obtenido": "0",
+      "ok": true
+    },
+    {
+      "escenario": "Décimo usuario distinto",
+      "esperado": "1 colectivo, 10 reportantes",
+      "obtenido": "1 / 10",
+      "ok": true
+    },
+    {
+      "escenario": "Colectivo con antenas normales",
+      "esperado": "investigación pendiente",
+      "obtenido": "true",
+      "ok": true
+    },
+    {
+      "escenario": "Antena inhabilitada",
+      "esperado": "1 incidente de infraestructura",
+      "obtenido": "1",
+      "ok": true
+    },
+    {
+      "escenario": "Relación colectivo↔infraestructura",
+      "esperado": "relacionados, usuarios sin duplicar (10)",
+      "obtenido": "1 rel · 10 usuarios",
+      "ok": true
+    },
+    {
+      "escenario": "Prioridad determinista",
+      "esperado": "calculada y explicable",
+      "obtenido": "ALTA 56.5",
+      "ok": true
+    },
+    {
+      "escenario": "IA (AWS Step Functions -> GCP Cloud Run -> Vertex AI)",
+      "esperado": "VERTEX_AI_GEMINI",
+      "obtenido": "VERTEX_AI_GEMINI",
+      "ok": true
+    },
+    {
+      "escenario": "Salida IA validada",
+      "esperado": "resumen + causas + acciones + incertidumbres",
+      "obtenido": "gemini-3.5-flash-lite · 1398 ms",
+      "ok": true
+    },
+    {
+      "escenario": "Recuperación (3 normales)",
+      "esperado": "verificación pendiente, no SOLUCIONADA",
+      "obtenido": "REGISTRADA · pendiente=true",
+      "ok": true
+    },
+    {
+      "escenario": "Cambio de estado auditado",
+      "esperado": "REGISTRADA->EN_ATENCION->SOLUCIONADA",
+      "obtenido": "REGISTRADA->EN_ATENCION EN_ATENCION->SOLUCIONADA",
+      "ok": true
+    },
+    {
+      "escenario": "Transición inválida",
+      "esperado": "409 (SOLUCIONADA→EN_REVISION sin reabrir)",
+      "obtenido": "409",
+      "ok": true
+    },
+    {
+      "escenario": "Ejecuciones Step Functions",
+      "esperado": "0 FALLIDO, 0 pendientes",
+      "obtenido": "{\"INICIADO\":0,\"EN_EJECUCION\":0,\"COMPLETADO\":290,\"FALLIDO\":0}",
+      "ok": true
+    }
+  ],
+  "convergence": [
+    {
+      "label": "9+1",
+      "ms": 23455,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 285,
+      "FALLIDO": 0
+    },
+    {
+      "label": "10.º",
+      "ms": 6765,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 286,
+      "FALLIDO": 0
+    },
+    {
+      "label": "antena",
+      "ms": 33184,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 287,
+      "FALLIDO": 0
+    },
+    {
+      "label": "recuperación",
+      "ms": 29411,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 288,
+      "FALLIDO": 0
+    },
+    {
+      "label": "estado",
+      "ms": 10183,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 290,
+      "FALLIDO": 0
+    }
+  ],
+  "aiSample": {
+    "source": "VERTEX_AI_GEMINI",
+    "model": "gemini-3.5-flash-lite",
+    "latencyMs": 1398,
+    "summary": "Incidente registrado de prioridad alta en la zona residencial Las Palmeras, con entre 20 y 49 reportes únicos que afectan a un catálogo estimado de 4300 usuarios. Se considera una antena en la zona cuyo estado es INHABILITADA. Los problemas reportados incluyen principalmente fallas de datos móviles, SMS y pérdida de señal.",
+    "probableCauses": [
+      "Falla crítica de hardware o alimentación en la antena inhabilitada de la zona",
+      "Corte de transmisión o transporte hacia la antena afectada"
+    ],
+    "recommendedActions": [
+      "Verificar el estado de energía y conectividad de transporte de la antena inhabilitada",
+      "Iniciar procedimiento de escalamiento con el equipo de campo para revisión física de la antena",
+      "Monitorear la evolución de los reportes de usuarios y métricas de tráfico en Las Palmeras"
+    ],
+    "uncertainties": [
+      "La correlación entre los reportes de los usuarios y el estado de la antena no confirma causalidad definitiva sin telemetría adicional",
+      "No se dispone del motivo exacto que causó que la antena se encuentre inhabilitada"
+    ]
+  },
+  "failed": 0
+}

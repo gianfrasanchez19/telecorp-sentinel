@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Elimina los recursos de GCP creados por deploy-gcp.sh (pide confirmación).
 set -euo pipefail
+# shellcheck source=/dev/null
+source "$(dirname "$0")/_gcloud-shim.sh"
 : "${GCP_PROJECT_ID:?Defina GCP_PROJECT_ID}"
 REGION="${GCP_REGION:-us-central1}"
 SERVICE="${SERVICE_NAME:-telecorp-ai}"

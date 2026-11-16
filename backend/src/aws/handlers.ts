@@ -19,6 +19,9 @@ import { createCloudRuntime } from './cloudRuntime.js';
 setRuntimeFactory(createCloudRuntime);
 setLogContext({ fn: process.env.AWS_LAMBDA_FUNCTION_NAME, stage: process.env.STAGE });
 
+// ---------- Portal (SPA) servido por el mismo API Gateway HTTPS ----------
+export { webApp } from './web.js';
+
 // ---------- API Gateway HTTP API ----------
 export const publicApi = lambdaApi(PUBLIC_ROUTES);
 export const ingestApi = lambdaApi(INGEST_ROUTES);
