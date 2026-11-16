@@ -5,6 +5,22 @@ Monitoreo de antenas móviles, reportes ciudadanos e incidentes priorizados con 
 
 > Proyecto académico con **datos sintéticos**: zonas, antenas, coordenadas y coberturas son ficticias. No representa a ningún operador real.
 
+## Equipo — Grupo 60
+
+- **André Gianfranco Sánchez Echevarría**
+- **Renzo Chen Heng Liang Corrales**
+
+Curso: Cloud Computing (CS2032) · UTEC · 2026-2 · [Hackathon](https://hackutec-cloud-2026-2.vercel.app/)
+
+## Entrega
+
+| Entregable | Dónde |
+|---|---|
+| Repositorio | este repositorio |
+| Arquitectura (imagen) | [`docs/architecture.png`](docs/architecture.png) |
+| Arquitectura interactiva (cada nodo enlaza al código que lo implementa) | [`docs/architecture-interactive.html`](docs/architecture-interactive.html) · fuente [`docs/architecture.archify.json`](docs/architecture.archify.json) |
+| Video (máx. 5 min) | entregado en Canvas |
+
 ![Arquitectura](docs/architecture.png)
 
 ## Qué resuelve
@@ -100,7 +116,7 @@ Resultado medido en **local emulado**: 1000 reportes concurrentes; 1000 aceptado
 
 | Componente | Estado | Evidencia |
 |---|---|---|
-| AWS Academy (us-east-1), stack `telecorp-sentinel-dev` | ✅ Desplegado | `scripts/deploy-aws.sh` |
+| AWS Academy (us-east-1), stack `telecorp-sentinel-dev` | ✅ **Redesplegado el 2026-11-16 en una nueva cuenta de AWS Academy** (la anterior fue desactivada). Smoke test 9/9, E2E multinube 12/12 con Gemini real, pre-vuelo 17/17 | `scripts/deploy-aws.sh`, `docs/evidence/e2e-cloud-mwip94bo.json` |
 | Portal **HTTPS** (SPA servida por el mismo API Gateway, CSP, HSTS, `X-Frame-Options: DENY`) | ✅ | Reporte enviado desde el portal publicado; prueba `test/web.test.ts` |
 | Google Cloud: Cloud Run **privado** (us-central1, min 0 / max 2) + Vertex AI `gemini-3.5-flash-lite` (endpoint global) | ✅ Desplegado | Anónimo → 403; identidad no invocadora → 401 |
 | AWS → GCP con **Workload Identity Federation** (solo `assumed-role/LabRole`, sin claves) | ✅ | Otro rol AWS → "rejected by the attribute condition" |
@@ -201,6 +217,17 @@ Controles: el simulador está **apagado por defecto**; `maximumConcurrency` de S
 - **PII:** se cifra aparte, no se registra en logs y se enmascara en la consola. A la IA solo llegan datos agregados y descripciones redactadas. El conteo de personas usa HMAC de la identidad normalizada, no un hash simple del DNI.
 - **API:** Lambda Authorizer en `/operator/*` y `/telemetry`; CORS solo para el origen del frontend desplegado; throttling; límite por IP con contador atómico; el token de consulta viaja en el cuerpo, nunca en la URL.
 - **Integridad:** idempotencia en todas las entradas; historial de solo inserción; reapertura explícita y auditada; transiciones de estado validadas.
+
+## Uso de inteligencia artificial (declaración transparente)
+
+La IA aparece en este proyecto de dos formas distintas:
+
+1. **Como parte del producto.** Gemini (Vertex AI, Google Cloud) resume incidentes y propone causas, acciones e incertidumbres. **No toma decisiones:** la prioridad, los estados y las reglas de negocio son deterministas y están en el código. Si Gemini no responde, el sistema usa un respaldo etiquetado `AI_UNAVAILABLE`.
+2. **Como herramienta de desarrollo.** El equipo usó asistentes de IA generativa durante el proyecto:
+   - **Claude Code (Anthropic)** como asistente de programación: apoyo en código, infraestructura como código, scripts, pruebas y documentación, y en el redespliegue y la verificación en la nube.
+   - **[Archify](https://github.com/tt-a1i/archify)** (código abierto) para generar el diagrama interactivo a partir de una especificación JSON revisada.
+
+Responsabilidad del equipo: definimos los requisitos y el diseño, revisamos el código generado, ejecutamos el despliegue y las pruebas, y **verificamos los resultados reales** (pruebas automatizadas, E2E en la nube y evidencias en `docs/evidence/`). Ningún resultado de este README es simulado. No publicamos prompts, conversaciones con los asistentes ni credenciales; el `.gitignore` los excluye.
 
 ## Limitaciones conocidas (honestas)
 

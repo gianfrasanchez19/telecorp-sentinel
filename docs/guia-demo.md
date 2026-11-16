@@ -7,12 +7,13 @@ Complementa el guion de `docs/demo-script.md` (4:40). Usa **solo datos ficticios
 | # | Acción | Resultado esperado |
 |---|---|---|
 | 0.1 | Abre Chrome en una **ventana de invitado o incógnito**, a 1920×1080 con zoom al 110 %. Cierra otras pestañas y silencia las notificaciones. | Ventana limpia |
-| 0.2 | Abre el **portal**: `<URL del portal>/`. | Banner "Proyecto académico con datos sintéticos" e Inicio |
-| 0.3 | Entra en **Acceso operador** con el usuario y la contraseña que te enviaron por un canal aparte. | Panel de operaciones |
+| 0.1b | **Inicia el Learner Lab** de AWS Academy (indicador verde). Los recursos existen aunque el laboratorio esté detenido, pero para la consola de AWS hace falta la sesión activa. | Laboratorio iniciado |
+| 0.2 | Abre el **portal**: https://e8iarrhhf8.execute-api.us-east-1.amazonaws.com/ (redespliegue del 2026-11-16 en la nueva cuenta de AWS Academy). | Banner "Proyecto académico con datos sintéticos" e Inicio |
+| 0.3 | Entra en **Acceso operador** (`/operador/login`) con el usuario `operador.demo`. La contraseña está en `.local/operator-credentials-cloud.txt` (nunca la muestres en pantalla). | Panel de operaciones |
 | 0.4 | **Calienta** la plataforma: abre una vez Panel, Incidentes, Antenas, Reportes, Analítica y Laboratorio. | La primera carga tarda unos 3 s (arranque en frío); luego, menos de 1 s |
 | 0.5 | En **Laboratorio**, pulsa **"Emitir un minuto de telemetría"**. | Las antenas pasan a "Normal". Sin lecturas durante 3 min vuelven a "Sin datos" (es correcto: falta de datos ≠ 0) |
 | 0.6 | Elige los datos de la demo en `datos-ficticios.md`: una **zona + "SMS no llegan"** limpia y un **índice inicial nuevo**. | Anótalos en un papel |
-| 0.7 | Ten listos los **clips de consola** que te pasó el dueño del proyecto: Step Functions y Cloud Run. | 2 clips de unos 20 s |
+| 0.7 | Ten listos los **clips de consola**: Step Functions lo grabas tú desde tu consola de AWS Academy (oculta el ID de cuenta); Cloud Run lo graba el dueño del proyecto de Google Cloud (o te da acceso de solo lectura, ver `acceso-seguro.md`). | 2 clips de unos 20 s |
 
 > Si un número no coincide, el guion permite decirlo. **Nunca simules resultados.**
 

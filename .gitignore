@@ -27,3 +27,7 @@ docs/evidence/private/
 *.pptx
 PROMPT*.md
 *prompt*maestro*
+
+# Artefactos locales de Archify (recibos con rutas locales)
+.archify/
+docs/*.delivery.json

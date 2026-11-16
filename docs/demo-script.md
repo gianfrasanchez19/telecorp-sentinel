@@ -6,9 +6,10 @@ Documento interno de apoyo para grabar; **no se entrega como informe**. Los clic
 
 | Antes de grabar | Responsable |
 |---|---|
-| Dar acceso con la cuenta `operador.video` (contraseña por un canal aparte); ver `docs/acceso-seguro.md` | Dueño del proyecto |
-| Grabar los clips de consola: Step Functions (~20 s) y Cloud Run (~15 s) | Dueño del proyecto |
-| Confirmar que la sesión de AWS Academy esté iniciada durante la grabación | Dueño del proyecto |
+| Portal del redespliegue (2026-11-16): https://e8iarrhhf8.execute-api.us-east-1.amazonaws.com/ · operador `operador.demo` | Dueño de la cuenta AWS Academy |
+| Grabar el clip de Step Functions (~20 s) en la consola de AWS Academy | Dueño de la cuenta AWS Academy |
+| Grabar el clip de Cloud Run (~15 s) o dar acceso de solo lectura | Dueño del proyecto de Google Cloud |
+| Confirmar que la sesión de AWS Academy esté iniciada durante la grabación | Dueño de la cuenta AWS Academy |
 | Calentar las pantallas, emitir un minuto de telemetría y elegir una opción de datos | Quien graba |
 
 ## Guion (≈ 4:40)

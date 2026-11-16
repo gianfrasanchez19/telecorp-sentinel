@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "TeleCorp Sentinel — Arquitectura multinube AWS + Google Cloud",
+    "output": "docs/architecture-interactive.html",
+    "quality_profile": "showcase",
+    "locale": "es",
+    "repository": {
+      "url": "https://github.com/gianfrasanchez19/telecorp-sentinel.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "b7e21c98f60c379df4b00dc6b052feb75a1d141f"
+    }
+  },
+  "components": [
+    { "id": "users", "type": "external", "label": "Ciudadano y operador", "sublabel": "navegador HTTPS", "pos": [40, 180], "size": [130, 62] },
+    { "id": "webapp", "type": "frontend", "label": "Lambda webApp", "sublabel": "portal SPA · CSP", "pos": [230, 40], "size": [130, 62],
+      "sources": [{ "path": "backend/serverless.yml", "line": 112, "end_line": 120, "label": "webApp por API Gateway" }] },
+    { "id": "apigw", "type": "security", "label": "API Gateway HTTP", "sublabel": "CORS · throttling", "pos": [230, 180], "size": [130, 62],
+      "sources": [{ "path": "backend/serverless.yml", "line": 83, "end_line": 99, "label": "httpApi + authorizer" }] },
+    { "id": "authz", "type": "security", "label": "Lambda Authorizer", "sublabel": "JWT HS256", "pos": [230, 330], "size": [130, 62],
+      "sources": [
+        { "path": "backend/serverless.yml", "line": 153, "end_line": 158, "label": "función authorizer" },
+        { "path": "backend/src/aws/handlers.ts", "line": 31, "end_line": 31, "label": "handler authorizer" }
+      ] },
+    { "id": "api", "type": "backend", "label": "Lambdas API", "sublabel": "public · operator", "pos": [420, 180], "size": [130, 62],
+      "sources": [{ "path": "backend/serverless.yml", "line": 122, "end_line": 152, "label": "rutas públicas y operador" }] },
+    { "id": "secrets", "type": "security", "label": "Secrets Manager", "sublabel": "clave maestra HKDF", "pos": [420, 330], "size": [130, 62],
+      "sources": [
+        { "path": "infra/aws/resources.yml", "line": 42, "end_line": 51, "label": "AppSecret generado" },
+        { "path": "backend/src/lib/secrets.ts", "line": 26, "end_line": 26, "label": "GetSecretValue" }
+      ] },
+    { "id": "ddb", "type": "database", "label": "DynamoDB", "sublabel": "PITR · Multi-AZ", "pos": [670, 180], "size": [130, 62],
+      "sources": [
+        { "path": "infra/aws/resources.yml", "line": 6, "end_line": 40, "label": "tabla única on-demand" },
+        { "path": "backend/src/store/dynamoStore.ts", "line": 82, "end_line": 82, "label": "TransactWrite" }
+      ] },
+    { "id": "pub", "type": "backend", "label": "streamPublisher", "sublabel": "outbox → SQS", "pos": [870, 180], "size": [130, 62],
+      "sources": [
+        { "path": "backend/serverless.yml", "line": 160, "end_line": 180, "label": "stream + filtros" },
+        { "path": "backend/src/aws/handlers.ts", "line": 46, "end_line": 46, "label": "handler" }
+      ] },
+    { "id": "qev", "type": "messagebus", "label": "SQS eventos", "sublabel": "+ DLQ (5 intentos)", "pos": [1065, 180], "size": [130, 62],
+      "sources": [{ "path": "infra/aws/resources.yml", "line": 54, "end_line": 69, "label": "cola + DLQ" }] },
+    { "id": "cons", "type": "backend", "label": "eventsConsumer", "sublabel": "nombre evt-<id>", "pos": [1275, 180], "size": [130, 62],
+      "sources": [
+        { "path": "backend/serverless.yml", "line": 181, "end_line": 191, "label": "consumidor SQS" },
+        { "path": "backend/src/aws/cloudRuntime.ts", "line": 21, "end_line": 24, "label": "StartExecution" }
+      ] },
+    { "id": "sfn", "type": "backend", "label": "Step Functions", "sublabel": "Choice · Map · Catch", "pos": [1275, 330], "size": [140, 62],
+      "sources": [
+        { "path": "infra/aws/resources.yml", "line": 98, "end_line": 115, "label": "STANDARD" },
+        { "path": "backend/statemachine/incident-workflow.asl.json", "line": 75, "end_line": 113, "label": "Map AnalyzeWithGCP" },
+        { "path": "backend/statemachine/incident-workflow.asl.json", "line": 128, "end_line": 165, "label": "notificar · MarkFailed" }
+      ] },
+    { "id": "qnot", "type": "messagebus", "label": "SQS avisos", "sublabel": "NOTIF# + DLQ", "pos": [870, 40], "size": [130, 62],
+      "sources": [{ "path": "infra/aws/resources.yml", "line": 70, "end_line": 84, "label": "cola + DLQ" }] },
+    { "id": "notif", "type": "backend", "label": "notifications", "sublabel": "deduplicado", "pos": [1065, 40], "size": [130, 62],
+      "sources": [
+        { "path": "backend/serverless.yml", "line": 192, "end_line": 201, "label": "consumidor" },
+        { "path": "backend/src/aws/cloudRuntime.ts", "line": 87, "end_line": 87, "label": "SNS Publish" }
+      ] },
+    { "id": "sns", "type": "cloud", "label": "Amazon SNS", "sublabel": "correo filtrado", "pos": [1275, 40], "size": [130, 62],
+      "sources": [{ "path": "infra/aws/resources.yml", "line": 150, "end_line": 167, "label": "tema + filtro" }] },
+    { "id": "sts", "type": "security", "label": "Google STS + IAM", "sublabel": "Workload Identity", "pos": [1515, 330], "size": [140, 62],
+      "sources": [
+        { "path": "backend/src/ai/gcpAuth.ts", "line": 36, "end_line": 88, "label": "SigV4 → STS → ID token" },
+        { "path": "infra/gcp/deploy-gcp.sh", "line": 67, "end_line": 73, "label": "pool WIF" }
+      ] },
+    { "id": "run", "type": "backend", "label": "Cloud Run privado", "sublabel": "FastAPI · min 0", "pos": [1515, 480], "size": [140, 62],
+      "sources": [
+        { "path": "infra/gcp/deploy-gcp.sh", "line": 59, "end_line": 64, "label": "--no-allow-unauthenticated" },
+        { "path": "ai-service/app/main.py", "line": 53, "end_line": 54, "label": "POST /v1/analyze" }
+      ] },
+    { "id": "vertex", "type": "cloud", "label": "Vertex AI Gemini", "sublabel": "JSON validado", "pos": [1515, 630], "size": [140, 62],
+      "sources": [{ "path": "ai-service/app/analyzer.py", "line": 59, "end_line": 70, "label": "genai vertexai=True" }] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "AWS us-east-1 · AWS Academy (LabRole)", "wraps": ["webapp", "apigw", "authz", "api", "secrets", "ddb", "pub", "qev", "cons", "sfn", "qnot", "notif", "sns"], "pad": 20 },
+    { "kind": "region", "label": "Google Cloud us-central1", "wraps": ["sts", "run", "vertex"], "pad": 20 }
+  ],
+  "connections": [
+    { "from": "users", "to": "apigw", "label": "HTTPS", "variant": "emphasis" },
+    { "from": "apigw", "to": "webapp", "label": "GET /" },
+    { "from": "apigw", "to": "authz", "label": "/operator/*", "variant": "security" },
+    { "from": "authz", "to": "secrets", "label": "clave", "variant": "security" },
+    { "from": "apigw", "to": "api", "label": "rutas", "variant": "emphasis" },
+    { "from": "api", "to": "secrets", "label": "HMAC · AES", "variant": "security" },
+    { "from": "api", "to": "ddb", "label": "TransactWrite", "variant": "emphasis" },
+    { "from": "ddb", "to": "pub", "label": "Streams", "variant": "emphasis" },
+    { "from": "pub", "to": "qev", "label": "outbox", "variant": "emphasis" },
+    { "from": "pub", "to": "qnot", "label": "NOTIF#", "variant": "dashed" },
+    { "from": "qnot", "to": "notif", "label": "lote", "variant": "dashed" },
+    { "from": "notif", "to": "sns", "label": "Publish", "variant": "dashed" },
+    { "from": "qev", "to": "cons", "label": "lote SQS", "variant": "emphasis" },
+    { "from": "cons", "to": "sfn", "label": "StartExecution", "variant": "emphasis" },
+    { "from": "sfn", "to": "ddb", "label": "persiste incidente", "fromSide": "left", "toSide": "bottom" },
+    { "from": "sfn", "to": "sts", "label": "WIF · SigV4", "variant": "security" },
+    { "from": "sfn", "to": "run", "label": "Bearer ID token", "variant": "security", "fromSide": "bottom", "toSide": "left" },
+    { "from": "run", "to": "vertex", "label": "Gemini", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Fiabilidad", "items": [
+      "Una sola TransactWrite: registro + idempotencia + outbox",
+      "DLQ en cada cola y outboxReconciler cada 5 min re-publica lo pendiente",
+      "Ejecuciones con nombre determinista evt-<id>: sin duplicados; Catch → MarkFailed con replay"
+    ] },
+    { "dot": "rose", "title": "Seguridad", "items": [
+      "Secretos solo en Secrets Manager (claves derivadas con HKDF)",
+      "PII cifrada con AES-GCM; personas contadas por HMAC",
+      "Cloud Run privado: AWS entra sin claves, solo assumed-role/LabRole"
+    ] },
+    { "dot": "violet", "title": "IA y costes", "items": [
+      "Gemini solo ante cambios materiales; si falla, respaldo AI_UNAVAILABLE",
+      "La IA sugiere; prioridad y estados son deterministas",
+      "Todo escala a cero; simulador EventBridge apagado por defecto"
+    ] }
+  ]
+}

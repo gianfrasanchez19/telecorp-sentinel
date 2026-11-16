@@ -1,0 +1,142 @@
+{
+  "api": "https://<api-id>.execute-api.us-east-1.amazonaws.com",
+  "runId": "mwip94bo",
+  "at": "2026-11-16T03:26:04.872Z",
+  "environment": "AWS Academy us-east-1 + Google Cloud (Cloud Run us-central1, Vertex AI global)",
+  "results": [
+    {
+      "escenario": "9 usuarios + 1 repetido",
+      "esperado": "sin colectivo",
+      "obtenido": "0",
+      "ok": true
+    },
+    {
+      "escenario": "Décimo usuario distinto",
+      "esperado": "1 colectivo, 10 reportantes",
+      "obtenido": "1 / 10",
+      "ok": true
+    },
+    {
+      "escenario": "Colectivo con antenas normales",
+      "esperado": "investigación pendiente",
+      "obtenido": "true",
+      "ok": true
+    },
+    {
+      "escenario": "Antena inhabilitada",
+      "esperado": "1 incidente de infraestructura",
+      "obtenido": "1",
+      "ok": true
+    },
+    {
+      "escenario": "Relación colectivo↔infraestructura",
+      "esperado": "relacionados, usuarios sin duplicar (10)",
+      "obtenido": "1 rel · 10 usuarios",
+      "ok": true
+    },
+    {
+      "escenario": "Prioridad determinista",
+      "esperado": "calculada y explicable",
+      "obtenido": "ALTA 55.3",
+      "ok": true
+    },
+    {
+      "escenario": "IA (AWS Step Functions -> GCP Cloud Run -> Vertex AI)",
+      "esperado": "VERTEX_AI_GEMINI",
+      "obtenido": "VERTEX_AI_GEMINI",
+      "ok": true
+    },
+    {
+      "escenario": "Salida IA validada",
+      "esperado": "resumen + causas + acciones + incertidumbres",
+      "obtenido": "gemini-3.5-flash-lite · 1535 ms",
+      "ok": true
+    },
+    {
+      "escenario": "Recuperación (3 normales)",
+      "esperado": "verificación pendiente, no SOLUCIONADA",
+      "obtenido": "REGISTRADA · pendiente=true",
+      "ok": true
+    },
+    {
+      "escenario": "Cambio de estado auditado",
+      "esperado": "REGISTRADA->EN_ATENCION->SOLUCIONADA",
+      "obtenido": "REGISTRADA->EN_ATENCION EN_ATENCION->SOLUCIONADA",
+      "ok": true
+    },
+    {
+      "escenario": "Transición inválida",
+      "esperado": "409 (SOLUCIONADA→EN_REVISION sin reabrir)",
+      "obtenido": "409",
+      "ok": true
+    },
+    {
+      "escenario": "Ejecuciones Step Functions",
+      "esperado": "0 FALLIDO, 0 pendientes",
+      "obtenido": "{\"INICIADO\":0,\"EN_EJECUCION\":0,\"COMPLETADO\":16,\"FALLIDO\":0}",
+      "ok": true
+    }
+  ],
+  "convergence": [
+    {
+      "label": "9+1",
+      "ms": 22655,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 11,
+      "FALLIDO": 0
+    },
+    {
+      "label": "10.º",
+      "ms": 38760,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 12,
+      "FALLIDO": 0
+    },
+    {
+      "label": "antena",
+      "ms": 13272,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 13,
+      "FALLIDO": 0
+    },
+    {
+      "label": "recuperación",
+      "ms": 9804,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 14,
+      "FALLIDO": 0
+    },
+    {
+      "label": "estado",
+      "ms": 22609,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 16,
+      "FALLIDO": 0
+    }
+  ],
+  "aiSample": {
+    "source": "VERTEX_AI_GEMINI",
+    "model": "gemini-3.5-flash-lite",
+    "latencyMs": 1535,
+    "summary": "Se registró un incidente de infraestructura en la zona Campus Sur (criticidad EDUCACION) con prioridad ALTA. Se contabilizaron entre 10 y 19 reportes de usuarios afectados y se identificó una antena considerada cuyo estado actual y peor estado registrado es INHABILITADA. No se ha detectado recuperación ni hay investigación pendiente.",
+    "probableCauses": [
+      "Fallo hardware o software en la única antena considerada en la zona.",
+      "Corte en la alimentación eléctrica o de transmisión hacia la antena inhabilitada."
+    ],
+    "recommendedActions": [
+      "Verificar de inmediato el estado de energía y conectividad de transmisión de la antena inhabilitada.",
+      "Despachar equipo técnico de campo para inspección física de la antena afectada en Campus Sur.",
+      "Monitorear los indicadores de servicio tras posibles acciones de reinicio remoto."
+    ],
+    "uncertainties": [
+      "La correlación entre los reportes de usuarios y el estado de la antena no prueba causalidad definitiva sin telemetría adicional.",
+      "Se desconoce el alcance exacto del impacto en los 6100 usuarios estimados del catálogo."
+    ]
+  },
+  "failed": 0
+}

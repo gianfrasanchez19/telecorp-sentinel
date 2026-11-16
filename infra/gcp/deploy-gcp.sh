@@ -70,8 +70,10 @@ gcloud iam workload-identity-pools describe "$POOL" --location global >/dev/null
 MAPPING="google.subject=assertion.arn,attribute.aws_role=assertion.arn.contains('assumed-role') ? assertion.arn.extract('{account_arn}assumed-role/') + 'assumed-role/' + assertion.arn.extract('assumed-role/{role_name}/') : assertion.arn"
 ROLE_ATTR="arn:aws:sts::${AWS_ACCOUNT_ID}:assumed-role/${AWS_ROLE_NAME}"
 if gcloud iam workload-identity-pools providers describe "$PROVIDER" --workload-identity-pool "$POOL" --location global >/dev/null 2>&1; then
+  # --account-id también se actualiza: si se cambia de cuenta AWS (p. ej. otra cuenta de AWS Academy),
+  # el proveedor debe confiar en la nueva cuenta o Google STS rechazará el token.
   gcloud iam workload-identity-pools providers update-aws "$PROVIDER" --workload-identity-pool "$POOL" --location global \
-    --attribute-mapping "$MAPPING" --attribute-condition "attribute.aws_role=='${ROLE_ATTR}'"
+    --account-id "$AWS_ACCOUNT_ID" --attribute-mapping "$MAPPING" --attribute-condition "attribute.aws_role=='${ROLE_ATTR}'"
 else
   gcloud iam workload-identity-pools providers create-aws "$PROVIDER" --workload-identity-pool "$POOL" --location global \
     --account-id "$AWS_ACCOUNT_ID" --attribute-mapping "$MAPPING" --attribute-condition "attribute.aws_role=='${ROLE_ATTR}'"
