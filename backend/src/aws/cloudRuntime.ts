@@ -71,6 +71,30 @@ export class SesEmail implements NotificationProvider {
   }
 }
 
+/**
+ * Correo vía Amazon SNS (alternativa a SES, bloqueado en AWS Academy).
+ * Un tema de notificaciones con suscripciones de correo CONFIRMADAS por el
+ * destinatario y una política de filtro por el atributo `recipient` (técnica del
+ * taller S13): cada mensaje sólo llega a la suscripción de su destinatario.
+ */
+export class SnsEmailTopic implements NotificationProvider {
+  readonly name = 'AWS_SNS_EMAIL';
+  readonly channel = 'EMAIL' as const;
+  private readonly sns = new SNSClient({});
+  constructor(private readonly topicArn: string) {}
+  async send(to: string, subject: string, body: string) {
+    const r = await this.sns.send(
+      new PublishCommand({
+        TopicArn: this.topicArn,
+        Subject: subject.slice(0, 99),
+        Message: body,
+        MessageAttributes: { recipient: { DataType: 'String', StringValue: to.toLowerCase() } },
+      }),
+    );
+    return { providerMessageId: r.MessageId };
+  }
+}
+
 /** Amazon SNS SMS (opcional; depende de la cuenta/región). */
 export class SnsSms implements NotificationProvider {
   readonly name = 'AWS_SNS_SMS';
@@ -85,6 +109,7 @@ export class SnsSms implements NotificationProvider {
 export async function createCloudRuntime(): Promise<Runtime> {
   const notifiers: NotificationProvider[] = [];
   if (process.env.SES_FROM_EMAIL) notifiers.push(new SesEmail(process.env.SES_FROM_EMAIL));
+  else if (process.env.SNS_NOTIFY_TOPIC_ARN) notifiers.push(new SnsEmailTopic(process.env.SNS_NOTIFY_TOPIC_ARN));
   if (process.env.SMS_ENABLED === 'true') notifiers.push(new SnsSms());
   const aiUrl = process.env.AI_SERVICE_URL;
   const authMode = (process.env.AI_AUTH_MODE as 'wif' | 'hmac') || 'wif';

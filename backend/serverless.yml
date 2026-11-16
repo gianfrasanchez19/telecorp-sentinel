@@ -20,7 +20,8 @@ params:
     region: us-east-1
     labRoleArn: ''
     corsOrigins: 'http://localhost:5173'
-    sesFromEmail: ''
+    sesFromEmail: '' # SES está bloqueado en AWS Academy: dejar vacío => correo vía SNS (tema + filtro por destinatario)
+    notifyEmailSubscriber: '' # correo de prueba que se suscribe al tema SNS (debe confirmar la suscripción)
     notifyAllowedRecipients: ''
     smsEnabled: 'false'
     aiServiceUrl: ''
@@ -34,11 +35,11 @@ params:
     scheduleKind: rule # rule (EventBridge rule, enseñado en S14) | scheduler (EventBridge Scheduler, usa labRoleArn)
     pitr: 'true'
     deletionProtection: 'false'
-    tracing: 'true' # Step Functions + Lambda (X-Ray); 'false' si X-Ray no está disponible
-    lambdaTracing: Active # Active | PassThrough
+    tracing: 'false' # X-Ray está bloqueado en AWS Academy (AccessDenied); 'true' en cuentas normales
+    lambdaTracing: PassThrough # Active (requiere X-Ray) | PassThrough
     architecture: arm64 # arm64 (más barato) | x86_64
     alertEmail: ''
-    deployFrontend: 'true'
+    frontendMode: s3website # s3website (AWS Academy: CloudFront bloqueado) | cloudfront (S3 privado + OAC) | none
     eventsMaxConcurrency: '5'
     notificationsMaxConcurrency: '2'
     apiBurst: '100'
@@ -54,6 +55,7 @@ provider:
   memorySize: 512
   timeout: 20
   logRetentionInDays: 14
+  versionFunctions: false # no acumular versiones de Lambda (menos ruido y almacenamiento)
   iam:
     role: ${param:labRoleArn}
   tracing:
@@ -66,6 +68,7 @@ provider:
     NOTIFICATIONS_QUEUE_URL: !Ref NotificationsQueue
     STATE_MACHINE_ARN: arn:aws:states:${aws:region}:${aws:accountId}:stateMachine:${self:service}-${sls:stage}-incident-workflow
     SES_FROM_EMAIL: ${param:sesFromEmail}
+    SNS_NOTIFY_TOPIC_ARN: !Ref NotificationsTopic
     NOTIFY_ALLOWED_RECIPIENTS: ${param:notifyAllowedRecipients}
     SMS_ENABLED: ${param:smsEnabled}
     AI_SERVICE_URL: ${param:aiServiceUrl}
@@ -151,7 +154,7 @@ functions:
           type: dynamodb
           arn: !GetAtt SentinelTable.StreamArn
           batchSize: 25
-          maximumBatchingWindow: 1
+          batchWindow: 1
           startingPosition: LATEST
           maximumRetryAttempts: 10
           maximumRecordAgeInSeconds: 3600

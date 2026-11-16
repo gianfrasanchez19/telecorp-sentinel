@@ -13,6 +13,13 @@ interface Result {
   duplicate: boolean;
 }
 
+/** Clave aleatoria de 128 bits; getRandomValues funciona también fuera de HTTPS (sitio web S3). */
+function newIdemKey(): string {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+}
+
 function localNowInput(): string {
   const d = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000);
   return d.toISOString().slice(0, 16);
@@ -21,7 +28,7 @@ function localNowInput(): string {
 export default function ReportPage() {
   const catalog = useApi<Catalog>('/catalog');
   // Clave de idempotencia estable mientras el formulario esté abierto: reintentos no duplican.
-  const [idemKey, setIdemKey] = useState(() => crypto.randomUUID().replace(/-/g, ''));
+  const [idemKey, setIdemKey] = useState(newIdemKey);
   const [form, setForm] = useState({ documentType: 'DNI', documentNumber: '', serviceNumber: '', zoneId: '', locationHint: '', occurredAt: localNowInput(), problemType: 'SIN_SENAL', description: '', email: '', phone: '', notifyConsent: false });
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<ApiError>();
@@ -93,7 +100,7 @@ export default function ReportPage() {
             className="btn"
             onClick={() => {
               setResult(undefined);
-              setIdemKey(crypto.randomUUID().replace(/-/g, ''));
+              setIdemKey(newIdemKey());
               setForm({ ...form, description: '' });
             }}
           >

@@ -1,0 +1,117 @@
+{
+  "api": "https://<api-id>.execute-api.us-east-1.amazonaws.com",
+  "runId": "mwij7da4",
+  "at": "2026-11-16T00:37:35.459Z",
+  "environment": "AWS (cuenta AWS Academy, us-east-1)",
+  "results": [
+    {
+      "escenario": "9 usuarios + 1 repetido",
+      "esperado": "sin colectivo",
+      "obtenido": "0",
+      "ok": true
+    },
+    {
+      "escenario": "Décimo usuario distinto",
+      "esperado": "1 colectivo, 10 reportantes",
+      "obtenido": "1 / 10",
+      "ok": true
+    },
+    {
+      "escenario": "Colectivo con antenas normales",
+      "esperado": "investigación pendiente",
+      "obtenido": "true",
+      "ok": true
+    },
+    {
+      "escenario": "Antena inhabilitada",
+      "esperado": "1 incidente de infraestructura",
+      "obtenido": "1",
+      "ok": true
+    },
+    {
+      "escenario": "Relación colectivo↔infraestructura",
+      "esperado": "relacionados, usuarios sin duplicar (10)",
+      "obtenido": "1 rel · 10 usuarios",
+      "ok": true
+    },
+    {
+      "escenario": "Prioridad determinista",
+      "esperado": "calculada y explicable",
+      "obtenido": "ALTA 49",
+      "ok": true
+    },
+    {
+      "escenario": "IA",
+      "esperado": "respaldo etiquetado (GCP aún no desplegado)",
+      "obtenido": "AI_UNAVAILABLE",
+      "ok": true
+    },
+    {
+      "escenario": "Recuperación (3 normales)",
+      "esperado": "verificación pendiente, no SOLUCIONADA",
+      "obtenido": "REGISTRADA · pendiente=true",
+      "ok": true
+    },
+    {
+      "escenario": "Cambio de estado auditado",
+      "esperado": "REGISTRADA->EN_ATENCION->SOLUCIONADA",
+      "obtenido": "REGISTRADA->EN_ATENCION EN_ATENCION->SOLUCIONADA",
+      "ok": true
+    },
+    {
+      "escenario": "Transición inválida",
+      "esperado": "409 (SOLUCIONADA→EN_REVISION sin reabrir)",
+      "obtenido": "409",
+      "ok": true
+    },
+    {
+      "escenario": "Ejecuciones Step Functions",
+      "esperado": "0 FALLIDO, 0 pendientes",
+      "obtenido": "{\"INICIADO\":0,\"EN_EJECUCION\":0,\"COMPLETADO\":44,\"FALLIDO\":0}",
+      "ok": true
+    }
+  ],
+  "convergence": [
+    {
+      "label": "9+1",
+      "ms": 23113,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 39,
+      "FALLIDO": 0
+    },
+    {
+      "label": "10.º",
+      "ms": 32817,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 40,
+      "FALLIDO": 0
+    },
+    {
+      "label": "antena",
+      "ms": 26299,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 41,
+      "FALLIDO": 0
+    },
+    {
+      "label": "recuperación",
+      "ms": 45657,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 42,
+      "FALLIDO": 0
+    },
+    {
+      "label": "estado",
+      "ms": 26058,
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 44,
+      "FALLIDO": 0
+    }
+  ],
+  "failed": 0
+}

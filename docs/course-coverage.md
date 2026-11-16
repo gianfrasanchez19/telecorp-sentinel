@@ -39,4 +39,5 @@ Marcas: ✅ verificado · ⚠️ no verificable (no se pudo abrir) · ➕ requis
 | Cognito no disponible | Taller S10-1 ✅ | JWT propio con clave en Secrets Manager |
 | Las credenciales del laboratorio duran 4 h | Taller S10-2 ✅ | `deploy-aws.sh` verifica la identidad antes de desplegar; la autenticación AWS→GCP usa el rol, no credenciales de usuario |
 | Región us-east-1 | Ejemplos del curso ✅ | Región por defecto `us-east-1` |
-| SES en sandbox, CloudFront, X-Ray, EventBridge Scheduler y concurrencia de Lambda | ⚠️ No consta en el material | Todo es configurable: `sesFromEmail`, `deployFrontend`, `tracing`, `scheduleKind=rule` (por defecto, la opción enseñada) y `maximumConcurrency` acotado. `scripts/check-aws-services.sh` lo comprueba en la cuenta real antes de desplegar |
+| CloudFront, X-Ray y SES | **Verificado en la cuenta (2026-11-15) con `scripts/check-aws-services.sh`: `AccessDenied`** | Frontend en **sitio web S3** (taller S5), `tracing=false` y correo por **SNS** con suscripción y política de filtro (taller S13). La IaC con CloudFront, X-Ray y SES se conserva para cuentas normales |
+| EventBridge Scheduler, Lambda, API Gateway v2, DynamoDB, SQS, Step Functions, Secrets Manager, CloudFormation, S3, SNS, CloudWatch | ✅ Verificado en la cuenta | Se usan. LabRole confía en `lambda`, `states` y `scheduler`. Concurrencia de Lambda de la cuenta: 1000 |

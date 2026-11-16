@@ -61,6 +61,31 @@ describe('estado de antena y episodios', () => {
     expect(r.transitions).toHaveLength(0);
   });
 
+  it('entregas fuera de orden (SQS estándar): una lectura tardía completa la racha y dispara la recuperación', () => {
+    // Caso real observado en AWS: 0 (t0) y luego 95 (t1), 100 (t2), 105 (t3) aplicadas como t0, t2, t3, t1.
+    let s = emptyAntennaState('ANT-CSU-01', 'Z-CSU');
+    const kinds: string[] = [];
+    for (const [m, v] of [[0, 0], [2, 100], [3, 105], [1, 95]] as const) {
+      const r = applyReading(s, { eventId: `e${m}`, observedAt: t(m), gbPerMinute: v }, DEFAULT_CONFIG);
+      s = r.state;
+      kinds.push(...r.transitions.map((x) => x.kind));
+    }
+    expect(kinds).toEqual(['EPISODE_OPENED', 'EPISODE_RECOVERED']);
+    expect(s.openEpisode).toBeUndefined();
+    expect(s.status).toBe('NORMAL');
+    expect(s.lastObservedAt).toBe(t(3)); // el estado actual no retrocede
+    expect(s.lateReadings).toBe(1);
+  });
+
+  it('una lectura tardía anómala no reabre episodios ni cambia el estado actual', () => {
+    let s = emptyAntennaState('ANT-CSU-01', 'Z-CSU');
+    for (const m of [2, 3, 4]) s = applyReading(s, { eventId: `n${m}`, observedAt: t(m), gbPerMinute: 100 }, DEFAULT_CONFIG).state;
+    const r = applyReading(s, { eventId: 'late', observedAt: new Date(Date.UTC(2026, 10, 15, 12, 3, 30)).toISOString(), gbPerMinute: 0 }, DEFAULT_CONFIG);
+    expect(r.transitions).toHaveLength(0);
+    expect(r.state.status).toBe('NORMAL');
+    expect(r.state.consecutiveNormal).toBe(1); // en orden temporal: N N A N
+  });
+
   it('falta de datos se distingue del valor cero', () => {
     const now = new Date(Date.UTC(2026, 10, 15, 12, 10));
     expect(displayStatus(undefined, now, DEFAULT_CONFIG)).toBe('SIN_DATOS');

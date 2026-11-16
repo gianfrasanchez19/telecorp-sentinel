@@ -45,9 +45,9 @@
   <text x="218" y="108" font-size="15" font-weight="bold" fill="#b35c00">AWS · us-east-1 · cuenta AWS Academy (rol LabRole) · Serverless Framework v4 / CloudFormation</text>
 
   <!-- Fila A: borde / API / seguridad -->
-  <rect x="230" y="124" width="180" height="70" rx="8" class="node"/><text x="320" y="146" text-anchor="middle" class="t">CloudFront + S3</text><text x="320" y="163" text-anchor="middle" class="s">S3 privado · OAC · HTTPS</text><text x="320" y="179" text-anchor="middle" class="s">SPA React (portal + consola)</text>
+  <rect x="230" y="124" width="180" height="70" rx="8" class="node"/><text x="320" y="146" text-anchor="middle" class="t">Amazon S3 (sitio web)</text><text x="320" y="163" text-anchor="middle" class="s">SPA React (portal + consola)</text><text x="320" y="179" text-anchor="middle" class="xs">Academy bloquea CloudFront (IaC lista)</text>
   <rect x="450" y="124" width="190" height="70" rx="8" class="node"/><text x="545" y="146" text-anchor="middle" class="t">API Gateway HTTP API</text><text x="545" y="163" text-anchor="middle" class="s">rutas validadas · CORS restringido</text><text x="545" y="179" text-anchor="middle" class="s">throttling 50 rps / ráfaga 100</text>
-  <rect x="680" y="124" width="180" height="70" rx="8" class="sec"/><text x="770" y="146" text-anchor="middle" class="t">Lambda Authorizer</text><text x="770" y="163" text-anchor="middle" class="s">JWT HS256 · rol OPERADOR/INGESTA</text><text x="770" y="179" text-anchor="middle" class="s">(Cognito no disponible en Academy)</text>
+  <rect x="680" y="124" width="180" height="70" rx="8" class="sec"/><text x="770" y="146" text-anchor="middle" class="t">Lambda Authorizer</text><text x="770" y="163" text-anchor="middle" class="s">JWT HS256 · roles y expiración</text><text x="770" y="179" text-anchor="middle" class="xs">(Cognito no disponible en Academy)</text>
   <rect x="900" y="124" width="250" height="70" rx="8" class="sec"/><text x="1025" y="146" text-anchor="middle" class="t">AWS Secrets Manager</text><text x="1025" y="163" text-anchor="middle" class="s">clave maestra generada por AWS → HKDF:</text><text x="1025" y="179" text-anchor="middle" class="s">JWT · HMAC seudónimos · AES-GCM PII · tokens</text>
 
   <!-- Fila B: lambdas API + DynamoDB -->
@@ -93,14 +93,14 @@
   <!-- Notificaciones -->
   <rect x="230" y="734" width="190" height="58" rx="8" class="q"/><text x="325" y="757" text-anchor="middle" class="t">SQS notificaciones</text><text x="325" y="774" text-anchor="middle" class="s">DLQ×4 · reintentos</text>
   <rect x="460" y="734" width="230" height="58" rx="8" class="node"/><text x="575" y="757" text-anchor="middle" class="t">λ notificationsConsumer</text><text x="575" y="774" text-anchor="middle" class="s">dedup · INCIERTA si se pierde respuesta</text>
-  <rect x="730" y="734" width="200" height="58" rx="8" class="node"/><text x="830" y="757" text-anchor="middle" class="t">Amazon SES (correo)</text><text x="830" y="774" text-anchor="middle" class="s">sandbox: destinatarios verificados</text>
+  <rect x="730" y="734" width="200" height="58" rx="8" class="node"/><text x="830" y="757" text-anchor="middle" class="t">Amazon SNS (correo)</text><text x="830" y="774" text-anchor="middle" class="s">filtro por destinatario (SES bloq.)</text>
   <rect x="970" y="734" width="180" height="58" rx="8" class="node" stroke-dasharray="5 3"/><text x="1060" y="757" text-anchor="middle" class="t">Amazon SNS SMS</text><text x="1060" y="774" text-anchor="middle" class="s">opcional (si la cuenta lo permite)</text>
 
   <!-- Programados y observabilidad -->
   <rect x="230" y="824" width="250" height="70" rx="8" class="node"/><text x="355" y="846" text-anchor="middle" class="t">Amazon EventBridge</text><text x="355" y="863" text-anchor="middle" class="s">λ simulator cada 1 min (apagable)</text><text x="355" y="879" text-anchor="middle" class="s">λ outboxReconciler cada 5 min</text>
-  <rect x="520" y="824" width="410" height="70" rx="8" class="node"/><text x="725" y="846" text-anchor="middle" class="t">Amazon CloudWatch</text><text x="725" y="863" text-anchor="middle" class="s">logs JSON {tipo, log_datos} 14 d · Logs Insights · X-Ray</text><text x="725" y="879" text-anchor="middle" class="s">alarmas: DLQ, errores, API p95 &gt; 2 s, ExecutionsFailed</text>
+  <rect x="520" y="824" width="410" height="70" rx="8" class="node"/><text x="725" y="846" text-anchor="middle" class="t">Amazon CloudWatch</text><text x="725" y="863" text-anchor="middle" class="s">logs JSON {tipo, log_datos} 14 d · Logs Insights</text><text x="725" y="879" text-anchor="middle" class="s">alarmas: DLQ, errores, API p95 &gt; 2 s, ExecutionsFailed</text>
   <rect x="970" y="824" width="180" height="70" rx="8" class="node"/><text x="1060" y="852" text-anchor="middle" class="t">SNS alertas</text><text x="1060" y="869" text-anchor="middle" class="s">correo del equipo</text>
-  <text x="218" y="966" class="xs">IaC: backend/serverless.yml + infra/aws/*.yml (validada con cfn-lint) · sin EC2 ni clústeres · DynamoDB on-demand + Lambda + SQS + Step Functions escalan a cero en reposo</text>
+  <text x="218" y="966" class="xs">IaC: backend/serverless.yml + infra/aws/*.yml (validada con cfn-lint; adaptada a AWS Academy: sin CloudFront, SES ni X-Ray) · sin EC2 ni clústeres · DynamoDB on-demand + Lambda + SQS + Step Functions escalan a cero en reposo</text>
 
   <!-- GCP -->
   <rect x="1210" y="350" width="370" height="420" rx="14" class="gcp"/>

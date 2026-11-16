@@ -101,5 +101,6 @@ const report = {
 console.log(JSON.stringify(report, null, 2));
 mkdirSync('docs/evidence', { recursive: true });
 const f = `docs/evidence/load-${API.includes('localhost') ? 'local' : 'cloud'}-${runId}.json`;
-writeFileSync(f, JSON.stringify(report, null, 2));
+// El repositorio es público: no se publica el identificador del endpoint desplegado.
+writeFileSync(f, JSON.stringify(report, null, 2).replace(/https:\/\/[a-z0-9]+\.execute-api/g, 'https://<api-id>.execute-api'));
 console.log(`Resultado guardado en ${f}`);

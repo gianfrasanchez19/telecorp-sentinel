@@ -1,0 +1,44 @@
+{
+  "api": "https://<api-id>.execute-api.us-east-1.amazonaws.com",
+  "runId": "mwijcuwj",
+  "at": "2026-11-16T00:39:35.392Z",
+  "total": 200,
+  "concurrency": 25,
+  "counts": {
+    "sent": 200,
+    "accepted": 200,
+    "duplicate": 0,
+    "rejected4xx": 0,
+    "throttled429": 0,
+    "errors5xxOrNetwork": 0
+  },
+  "ingestDurationMs": 2914,
+  "throughputPerSec": 69,
+  "latencyMs": {
+    "p50": 183,
+    "p95": 1582,
+    "max": 1617
+  },
+  "processing": {
+    "before": {
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 44,
+      "FALLIDO": 0,
+      "pendingOutbox": 0
+    },
+    "after": {
+      "INICIADO": 0,
+      "EN_EJECUCION": 0,
+      "COMPLETADO": 244,
+      "FALLIDO": 0,
+      "pendingOutbox": 0
+    },
+    "expectedCompleted": 244,
+    "processedThisRun": 200,
+    "failed": 0,
+    "pendingOutbox": 0,
+    "converged": true,
+    "convergenceMs": 18646
+  }
+}

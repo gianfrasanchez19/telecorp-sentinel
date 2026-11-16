@@ -18,3 +18,11 @@ CloudFrontDistributionId:
   Value: !Ref FrontendDistribution
 AlertsTopicArn:
   Value: !Ref AlertsTopic
+WebsiteBucket:
+  Condition: UseS3Website
+  Value: !Ref WebsiteBucket
+WebsiteUrl:
+  Condition: UseS3Website
+  Value: !GetAtt WebsiteBucket.WebsiteURL
+NotificationsTopicArn:
+  Value: !Ref NotificationsTopic

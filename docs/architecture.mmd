@@ -12,7 +12,7 @@ flowchart LR
 
   subgraph AWS["AWS (us-east-1) — núcleo serverless · AWS Academy LabRole"]
     direction LR
-    CF[CloudFront + OAC<br/>S3 privado: React SPA]:::aws
+    CF[Amazon S3 sitio web<br/>React SPA · CloudFront bloqueado en Academy]:::aws
     APIGW[API Gateway HTTP API<br/>CORS restringido · throttling]:::aws
     AUTHZ[Lambda Authorizer<br/>JWT HS256]:::aws
     SM[(Secrets Manager<br/>clave maestra HKDF)]:::data
@@ -27,7 +27,7 @@ flowchart LR
     QNO[[SQS notificaciones]]:::aws
     DLQ2[[DLQ notificaciones]]:::aws
     NOT[Lambda notificationsConsumer<br/>deduplicación]:::aws
-    SES[Amazon SES<br/>correo · sandbox]:::aws
+    SES[Amazon SNS correo<br/>filtro por destinatario]:::aws
     EB[EventBridge<br/>regla 1 min · 5 min]:::aws
     SIM[Lambda simulator]:::aws
     REC[Lambda outboxReconciler]:::aws

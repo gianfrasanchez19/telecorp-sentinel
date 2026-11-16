@@ -10,7 +10,7 @@ try() { local name="$1" hint="$2"; shift 2; if "$@" >/dev/null 2>&1; then ok "$n
 
 command -v aws >/dev/null || { echo "Instale AWS CLI v2: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"; exit 1; }
 ACCOUNT="$(aws sts get-caller-identity --query Account --output text 2>/dev/null)" || { echo "Sin credenciales válidas (¿expiró la sesión de AWS Academy?)."; exit 1; }
-WHO="$(aws sts get-caller-identity --query Arn --output text | sed -E 's#^arn:aws:(sts|iam)::[0-9]+:##')"
+WHO="$(aws sts get-caller-identity --query Arn --output text | sed -E 's|^arn:aws:(sts\|iam)::[0-9]+:||; s|/[^/]+$|/(sesión)|')"
 echo "Cuenta $ACCOUNT · identidad $WHO · región $REGION"
 echo "Servicios (sólo lectura):"
 try "Lambda" "requerido" aws lambda list-functions --max-items 1 --region "$REGION"

@@ -102,6 +102,7 @@ def main() -> int:
     params = dict(sls["params"]["default"])
     params["labRoleArn"] = "arn:aws:iam::123456789012:role/LabRole"
     params["alertEmail"] = "alertas@example.com"
+    params["notifyEmailSubscriber"] = "prueba@example.com"
     ctx = {"params": params, "service": sls["service"]}
     if not (SERVICE_DIR / "dist" / "statemachine-definition.json").exists():
         print("Falta backend/dist/statemachine-definition.json: ejecute primero npm run build -w backend")

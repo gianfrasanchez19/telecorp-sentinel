@@ -126,15 +126,13 @@ export function emptyAntennaState(antennaId: string, zoneId: string): AntennaSta
  */
 export function applyReading(prev: AntennaState, r: { eventId: string; observedAt: string; gbPerMinute: number }, cfg: DomainConfig): ApplyResult {
   const status = classifyGbPerMinute(r.gbPerMinute);
-  if (prev.lastObservedAt && r.observedAt <= prev.lastObservedAt) {
-    return { state: { ...prev, lateReadings: prev.lateReadings + 1 }, transitions: [], late: true };
-  }
+  if (prev.lastObservedAt && r.observedAt <= prev.lastObservedAt) return applyLateReading(prev, r, cfg);
   const s: AntennaState = {
     ...prev,
     lastObservedAt: r.observedAt,
     lastValue: r.gbPerMinute,
     status,
-    recent: [...prev.recent, { at: r.observedAt, v: r.gbPerMinute }].slice(-10),
+    recent: [...prev.recent, { at: r.observedAt, v: r.gbPerMinute }].slice(-RECENT_MAX),
   };
   const transitions: AntennaTransition[] = [];
   if (isAnomalous(status)) {
@@ -171,6 +169,35 @@ export function applyReading(prev: AntennaState, r: { eventId: string; observedA
     }
   }
   return { state: s, transitions, late: false };
+}
+
+const RECENT_MAX = 10;
+
+function trailing(recent: { v: number }[], pred: (s: AntennaStatus) => boolean): number {
+  let n = 0;
+  for (let i = recent.length - 1; i >= 0 && pred(classifyGbPerMinute(recent[i].v)); i--) n++;
+  return n;
+}
+
+/**
+ * Lectura TARDÍA (observedAt <= última aplicada), p. ej. por entregas de SQS fuera de
+ * orden: se inserta en la ventana reciente ORDENADA por observedAt y se recalculan las
+ * rachas consecutivas en orden temporal. Nunca cambia el estado actual (el de la lectura
+ * más reciente) ni abre episodios con datos pasados; sí puede completar la racha de
+ * lecturas normales que exige la política de recuperación.
+ */
+function applyLateReading(prev: AntennaState, r: { observedAt: string; gbPerMinute: number }, cfg: DomainConfig): ApplyResult {
+  const recent = [...prev.recent, { at: r.observedAt, v: r.gbPerMinute }].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0)).slice(-RECENT_MAX);
+  const s: AntennaState = { ...prev, recent, lateReadings: prev.lateReadings + 1 };
+  if (!recent.some((x) => x.at === r.observedAt && x.v === r.gbPerMinute)) return { state: s, transitions: [], late: true };
+  s.consecutiveNormal = trailing(recent, (x) => !isAnomalous(x));
+  s.consecutiveAnomalous = trailing(recent, isAnomalous);
+  const transitions: AntennaTransition[] = [];
+  if (prev.openEpisode && prev.status && !isAnomalous(prev.status) && s.consecutiveNormal >= cfg.recoveryConsecutiveNormal) {
+    transitions.push({ kind: 'EPISODE_RECOVERED', episode: { ...prev.openEpisode, currentStatus: 'NORMAL' }, endedAt: prev.lastObservedAt!, normalReadings: s.consecutiveNormal });
+    s.openEpisode = undefined;
+  }
+  return { state: s, transitions, late: true };
 }
 
 /** Estado a mostrar: SIN_DATOS si no hay lectura reciente (no se confunde con valor 0). */

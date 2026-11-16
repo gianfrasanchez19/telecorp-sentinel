@@ -146,6 +146,24 @@ SimulatorSchedule:
       RoleArn: ${param:labRoleArn}
       RetryPolicy: { MaximumRetryAttempts: 1, MaximumEventAgeInSeconds: 60 }
 
+# ---------------- Notificaciones por correo vía SNS (SES bloqueado en AWS Academy) ----------------
+NotificationsTopic:
+  Type: AWS::SNS::Topic
+  Properties:
+    TopicName: ${self:service}-${sls:stage}-notificaciones
+    DisplayName: TeleCorp Sentinel
+NotifySubscriberSubscription:
+  Type: AWS::SNS::Subscription
+  Condition: HasNotifySubscriber
+  Properties:
+    TopicArn: !Ref NotificationsTopic
+    Protocol: email
+    Endpoint: ${param:notifyEmailSubscriber}
+    # Cada suscriptor sólo recibe los mensajes cuyo atributo recipient es su correo.
+    FilterPolicyScope: MessageAttributes
+    FilterPolicy:
+      recipient: ['${param:notifyEmailSubscriber}']
+
 # ---------------- Observabilidad: alarmas CloudWatch ----------------
 AlertsTopic:
   Type: AWS::SNS::Topic
@@ -260,7 +278,29 @@ ConsumerErrorsAlarm:
     TreatMissingData: notBreaching
     AlarmActions: [!Ref AlertsTopic]
 
-# ---------------- Frontend: S3 privado + CloudFront (OAC) ----------------
+# ---------------- Frontend opción A (AWS Academy): sitio web estático en S3 (taller S5) ----------------
+WebsiteBucket:
+  Type: AWS::S3::Bucket
+  Condition: UseS3Website
+  Properties:
+    WebsiteConfiguration: { IndexDocument: index.html, ErrorDocument: index.html }
+    PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: false, IgnorePublicAcls: true, RestrictPublicBuckets: false }
+    OwnershipControls: { Rules: [{ ObjectOwnership: BucketOwnerEnforced }] }
+    BucketEncryption: { ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }] }
+WebsiteBucketPolicy:
+  Type: AWS::S3::BucketPolicy
+  Condition: UseS3Website
+  Properties:
+    Bucket: !Ref WebsiteBucket
+    PolicyDocument:
+      Statement:
+        - Sid: PublicReadStaticAssetsOnly
+          Effect: Allow
+          Principal: '*'
+          Action: s3:GetObject
+          Resource: !Join ['', [!GetAtt WebsiteBucket.Arn, '/*']]
+
+# ---------------- Frontend opción B (cuentas con CloudFront): S3 privado + CloudFront (OAC) ----------------
 FrontendBucket:
   Type: AWS::S3::Bucket
   Condition: DeployFrontend
