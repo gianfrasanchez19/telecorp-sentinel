@@ -98,7 +98,7 @@ export default function AnalyticsPage() {
         <>
           <div className="kpis">
             {(['CAIDA', 'SATURADA', 'INHABILITADA', 'SIN_DATOS'] as const).map((s) => (
-              <Kpi key={s} label={`Antenas ${ANTENNA_STATUS[s].label.toLowerCase()}`} value={d.antennas.kpis[s] ?? 0} hint={`de ${d.antennas.kpis.total} (estado actual)`} icon={<span aria-hidden="true" style={{ color: ANTENNA_STATUS[s].color }}>{ANTENNA_STATUS[s].icon}</span>} />
+              <Kpi key={s} label={`Antenas ${ANTENNA_STATUS[s].plural}`} value={d.antennas.kpis[s] ?? 0} hint={`de ${d.antennas.kpis.total} (estado actual)`} icon={<span aria-hidden="true" style={{ color: ANTENNA_STATUS[s].color }}>{ANTENNA_STATUS[s].icon}</span>} />
             ))}
             <Kpi label="Incidentes activos" value={d.incidents.activeTotal} hint={`${d.incidents.openedInRange} abiertos en el intervalo`} />
             <Kpi label="Reportantes únicos" value={fmtNum(d.reports.uniqueReporters)} hint={`${d.reports.total} reportes (${d.reports.synthetic} sintéticos)`} />

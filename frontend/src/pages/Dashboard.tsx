@@ -29,7 +29,7 @@ export default function Dashboard() {
       <div className="kpis">
         <Kpi label="Incidentes activos" value={incidents.length} hint={`${incidents.filter((i) => i.priority?.level === 'CRITICA').length} críticos · ${incidents.filter((i) => i.priority?.level === 'ALTA').length} altos`} />
         {(['CAIDA', 'INHABILITADA', 'SATURADA', 'SIN_DATOS'] as const).map((s) => (
-          <Kpi key={s} label={`Antenas ${ANTENNA_STATUS[s].label.toLowerCase()}`} value={count(s)} hint={`de ${antennas.length}`} icon={<span aria-hidden="true" style={{ color: ANTENNA_STATUS[s].color }}>{ANTENNA_STATUS[s].icon}</span>} />
+          <Kpi key={s} label={`Antenas ${ANTENNA_STATUS[s].plural}`} value={count(s)} hint={`de ${antennas.length}`} icon={<span aria-hidden="true" style={{ color: ANTENNA_STATUS[s].color }}>{ANTENNA_STATUS[s].icon}</span>} />
         ))}
         <Kpi label="Pendientes de verificación" value={pending.length} hint="recuperación técnica detectada" />
       </div>

@@ -60,6 +60,17 @@ export async function ingestTelemetry(raw: unknown): Promise<{ eventId: string; 
     if (e instanceof ConditionFailedError) return { eventId: t.eventId, status: t.status, duplicate: true };
     throw e;
   }
+  // Aplicación EN LÍNEA, en el orden en que llega la lectura (los productores envían en
+  // orden por antena): evita el desorden de SQS estándar en ráfagas de lecturas
+  // (observado en AWS). Si falla, la lectura ya es durable y el consumidor de la cola la
+  // aplica después; es idempotente gracias a la marca `applied` de la métrica.
+  if (process.env.TELEMETRY_INLINE_APPLY !== 'false') {
+    try {
+      await applyTelemetryEvent(t.eventId);
+    } catch (e) {
+      log.warn('telemetria_aplicacion_diferida', { eventId: t.eventId, motivo: (e as Error).name });
+    }
+  }
   return { eventId: t.eventId, status: t.status, duplicate: false };
 }
 

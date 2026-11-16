@@ -22,7 +22,7 @@ flowchart LR
     PUB[Lambda streamPublisher]:::aws
     QEV[[SQS eventos]]:::aws
     DLQ1[[DLQ eventos]]:::aws
-    CON[Lambda eventsConsumer<br/>telemetría en línea /<br/>StartExecution determinista]:::aws
+    CON[Lambda eventsConsumer<br/>StartExecution determinista /<br/>telemetría de respaldo]:::aws
     SFN{{Step Functions Standard<br/>incident-workflow}}:::aws
     QNO[[SQS notificaciones]]:::aws
     DLQ2[[DLQ notificaciones]]:::aws

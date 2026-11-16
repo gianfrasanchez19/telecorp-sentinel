@@ -26,7 +26,7 @@ Monitoreo de antenas móviles, reportes ciudadanos e incidentes priorizados con 
   - Lambda Authorizer con JWT (Cognito no está disponible en AWS Academy).
   - DynamoDB on-demand con tabla única: Multi-AZ, PITR, cifrado, Streams.
   - Patrón outbox: Streams → SQS (con DLQ) → **Step Functions Standard**.
-  - SQS de notificaciones → SES.
+  - SQS de notificaciones → correo por SNS (SES donde esté disponible).
   - EventBridge (simulador cada minuto y reconciliador del outbox).
   - **Secrets Manager**; CloudWatch (logs JSON, alarmas). Portal **HTTPS** servido por el mismo API Gateway (Lambda `webApp`, mismo origen, CSP y HSTS). La IaC también soporta S3 privado + CloudFront (OAC), sitio web S3 y X-Ray en cuentas que lo permitan.
   - **Verificado en la cuenta AWS Academy (2026-11-15):** CloudFront, X-Ray y SES devuelven `AccessDenied`. Por eso la configuración por defecto es `frontendMode=apigw` (el sitio S3 sería solo HTTP), `tracing=false` y correo por **SNS** (tema + suscripción confirmada + política de filtro por destinatario, técnica del taller S13).
@@ -38,7 +38,7 @@ Detalle: [`docs/architecture.svg`](docs/architecture.svg) · fuente Mermaid [`do
 
 1. `POST /reports` o `/telemetry`: validación con zod y **una sola TransactWrite** (registro + idempotencia + outbox). Responde 201 solo después de que la escritura es durable.
 2. DynamoDB Streams → `streamPublisher` → SQS (con reintentos, DLQ y *batch item failures*). Un reconciliador re-publica el outbox pendiente.
-3. `eventsConsumer`: la telemetría se aplica en línea (CAS por versión; los eventos fuera de orden no hacen retroceder el estado). Los reportes, episodios y cambios de estado inician Step Functions con un **nombre determinista** `evt-<eventId>`.
+3. La telemetría se aplica **en línea al ingresar**, en el orden de llegada (CAS por versión). Si falla, la aplica después el consumidor de la cola, de forma idempotente. Las lecturas tardías no hacen retroceder el estado. Los reportes, episodios y cambios de estado inician Step Functions con un **nombre determinista** `evt-<eventId>`.
 4. Workflow: `LoadEvent → RouteByType → ValidateAndCorrelate → HasChanges → PersistIncidentAndHistory → CalculatePriority → AIRequired → Map(AnalyzeWithGCP | Fallback) → QueueNotifications → MarkSucceeded`. Usa Retry exponencial con jitter y Catch → `MarkFailed` (persistido, con alarma y replay específico).
 5. Notificaciones: ítems `NOTIF#` deduplicados → SQS → SNS (correo filtrado por destinatario) o SES. Si se pierde la respuesta del proveedor, se marcan **INCIERTA** (sin reenvío automático). Nunca se afirma "recibido", solo "aceptada por el proveedor".
 
@@ -73,19 +73,30 @@ npm run dev:web
 
 | Comando | Qué hace |
 |---|---|
-| `npm test` | 50 pruebas del backend (dominio, flujo completo, carreras, IA y WIF, límite de tasa) |
+| `npm test` | 51 pruebas del backend (dominio, flujo completo, carreras, orden de telemetría, IA y WIF, portal y CSP, límite de tasa) |
 | `npm run demo -w backend` | Demo de aceptación: 12 escenarios medidos (9+1 usuarios, 10 simultáneos, límites, recuperación, recurrencia…) |
 | `npm run typecheck` · `npm run lint` · `npm run build` | Calidad y build (bundle Lambda ESM y SPA) |
 | `cd ai-service && python -m venv .venv && .venv/Scripts/pip install -r requirements-dev.txt && .venv/Scripts/python -m pytest` | 7 pruebas del servicio de IA |
 | `python scripts/validate_iac.py` | Ensambla la plantilla CloudFormation y la valida con cfn-lint, **sin desplegar** |
 | `bash scripts/check-no-secrets.sh` | Escaneo de credenciales, JWT, claves privadas y material privado antes de commit/push (también en CI) |
 | `API_URL=… OPERATOR_USER=… OPERATOR_PASSWORD=… npx tsx scripts/e2e-cloud.ts` | E2E de aceptación contra la nube (escenarios por el laboratorio autenticado; espera la convergencia real) |
+| `API_URL=… OPERATOR_USER=… OPERATOR_PASSWORD=… [AI_SERVICE_URL=…] npx tsx scripts/preflight-demo.ts` | **Pre-vuelo antes de grabar**: verifica AWS, GCP y Gemini, recorre todas las rutas y recomienda datos limpios para la demo |
 | `API_URL=… npx tsx scripts/smoke-test.ts` | Smoke test contra la API local o desplegada |
 | `API_URL=… OPERATOR_USER=… OPERATOR_PASSWORD=… LOAD_TOTAL=1000 npx tsx scripts/load-test.ts` | Ráfaga controlada: mide aceptados, p95 y convergencia, y guarda el resultado en `docs/evidence/` |
 
 Resultado medido en **local emulado**: 1000 reportes concurrentes; 1000 aceptados, 1000 procesados, 0 fallidos; p95 de ingesta 211 ms; convergencia en 2.4 s (`docs/evidence/`). **No es una medición en la nube.**
 
-## Estado del despliegue (2026-11-15)
+## Grabar el video (entrega)
+
+| Documento | Para qué |
+|---|---|
+| [`docs/demo-script.md`](docs/demo-script.md) | Guion de **4:40** (máximo 5:00) con tiempos y texto |
+| [`docs/guia-demo.md`](docs/guia-demo.md) | Paso a paso: pestañas, botones, qué explicar y qué resultado mostrar |
+| [`docs/datos-ficticios.md`](docs/datos-ficticios.md) | Ciudadanos ficticios y plan 9 + 1 con zonas e índices limpios |
+| [`docs/acceso-seguro.md`](docs/acceso-seguro.md) | Cómo dar acceso a quien graba sin compartir credenciales personales |
+| [`docs/architecture.png`](docs/architecture.png) | Arquitectura para entregar en Canvas (junto con el video y el enlace a GitHub; **sin informe**) |
+
+## Estado del despliegue (2026-11-16)
 
 | Componente | Estado | Evidencia |
 |---|---|---|
@@ -99,7 +110,7 @@ Resultado medido en **local emulado**: 1000 reportes concurrentes; 1000 aceptado
 | Correo (SNS) | ⏳ Desplegado sin suscriptor; se activa con `NOTIFY_EMAIL=<correo>` | — |
 
 **Errores reales que encontraron las pruebas en la nube (ya corregidos):**
-1. **Lecturas de telemetría fuera de orden** (SQS estándar): una lectura tardía se ignoraba y la recuperación (3 lecturas normales consecutivas) nunca se disparaba. Ahora las rachas se recalculan en orden temporal, sin retroceder el estado.
+1. **Lecturas de telemetría fuera de orden** (SQS estándar): con ráfagas de lecturas, una tardía se ignoraba y no se abrían ni cerraban episodios. Ahora la telemetría se aplica en línea en el orden de llegada, y las lecturas tardías se ordenan por `observedAt` sin retroceder el estado. Verificado en la nube: recurrencia de 3 episodios, 0 lecturas tardías.
 2. **WIF:** Google STS rechazaba el token de AWS si incluía la cabecera `x-amz-content-sha256`, que el firmador SigV4 añade por defecto. Ahora se firma sin ella (`applyChecksum: false`) y una prueba lo fija.
 3. **Gemini:** en este proyecto, los modelos responden 404 en `us-central1` y funcionan en el endpoint `global`. El modelo y la ubicación se configuran por variables y se verifican con `ai-service/scripts/check_model.py`.
 

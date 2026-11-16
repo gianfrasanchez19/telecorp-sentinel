@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
 import type { ApiError } from '../api';
 
-export const ANTENNA_STATUS: Record<string, { color: string; label: string; icon: string }> = {
-  NORMAL: { color: 'var(--good)', label: 'Normal', icon: '●' },
-  SATURADA: { color: 'var(--warning)', label: 'Saturada', icon: '▲' },
-  CAIDA: { color: 'var(--serious)', label: 'Caída', icon: '▼' },
-  INHABILITADA: { color: 'var(--critical)', label: 'Inhabilitada', icon: '✕' },
-  SIN_DATOS: { color: 'var(--nodata)', label: 'Sin datos', icon: '?' },
+export const ANTENNA_STATUS: Record<string, { color: string; label: string; plural: string; icon: string }> = {
+  NORMAL: { color: 'var(--good)', label: 'Normal', plural: 'normales', icon: '●' },
+  SATURADA: { color: 'var(--warning)', label: 'Saturada', plural: 'saturadas', icon: '▲' },
+  CAIDA: { color: 'var(--serious)', label: 'Caída', plural: 'caídas', icon: '▼' },
+  INHABILITADA: { color: 'var(--critical)', label: 'Inhabilitada', plural: 'inhabilitadas', icon: '✕' },
+  SIN_DATOS: { color: 'var(--nodata)', label: 'Sin datos', plural: 'sin datos', icon: '?' },
 };
 
 export function AntennaBadge({ status }: { status: string }) {

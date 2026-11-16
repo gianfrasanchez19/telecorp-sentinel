@@ -51,14 +51,14 @@
   <rect x="900" y="124" width="250" height="70" rx="8" class="sec"/><text x="1025" y="146" text-anchor="middle" class="t">AWS Secrets Manager</text><text x="1025" y="163" text-anchor="middle" class="s">clave maestra generada por AWS → HKDF:</text><text x="1025" y="179" text-anchor="middle" class="s">JWT · HMAC seudónimos · AES-GCM PII · tokens</text>
 
   <!-- Fila B: lambdas API + DynamoDB -->
-  <rect x="450" y="234" width="190" height="78" rx="8" class="node"/><text x="545" y="256" text-anchor="middle" class="t">Lambdas API (Node 22)</text><text x="545" y="273" text-anchor="middle" class="s">public · operator · ingest</text><text x="545" y="289" text-anchor="middle" class="s">zod · idempotencia · rate limit</text><text x="545" y="304" text-anchor="middle" class="s">logs JSON sin PII</text>
+  <rect x="450" y="234" width="190" height="78" rx="8" class="node"/><text x="545" y="256" text-anchor="middle" class="t">Lambdas API (Node 22)</text><text x="545" y="273" text-anchor="middle" class="s">public · operator · ingest</text><text x="545" y="289" text-anchor="middle" class="s">zod · idempotencia · orden</text><text x="545" y="304" text-anchor="middle" class="s">logs JSON sin PII</text>
   <rect x="680" y="234" width="470" height="78" rx="8" class="data"/><text x="915" y="256" text-anchor="middle" class="t">Amazon DynamoDB — tabla única on-demand</text><text x="915" y="273" text-anchor="middle" class="s">réplica en 3 zonas de disponibilidad · PITR · cifrado SSE · 2 GSI · TTL sólo temporales</text><text x="915" y="289" text-anchor="middle" class="s">reportes · PII cifrada aparte · métricas · episodios · incidentes · historial inmutable</text><text x="915" y="304" text-anchor="middle" class="s">bloqueo lógico INCKEY (1 incidente activo/clave) · contadores atómicos · outbox</text>
 
   <!-- Fila C: outbox → colas (derecha a izquierda) -->
   <rect x="980" y="352" width="170" height="58" rx="8" class="data"/><text x="1065" y="375" text-anchor="middle" class="t">DynamoDB Streams</text><text x="1065" y="392" text-anchor="middle" class="s">INSERT OUTBOX# / NOTIF#</text>
   <rect x="760" y="352" width="180" height="58" rx="8" class="node"/><text x="850" y="375" text-anchor="middle" class="t">λ streamPublisher</text><text x="850" y="392" text-anchor="middle" class="s">outbox → SQS · bisect · DLQ</text>
   <rect x="520" y="352" width="200" height="58" rx="8" class="q"/><text x="620" y="375" text-anchor="middle" class="t">SQS eventos</text><text x="620" y="392" text-anchor="middle" class="s">SSE · visibilidad 180 s · DLQ×5</text>
-  <rect x="230" y="352" width="250" height="58" rx="8" class="node"/><text x="355" y="375" text-anchor="middle" class="t">λ eventsConsumer</text><text x="355" y="392" text-anchor="middle" class="s">telemetría en línea · StartExecution evt-&lt;id&gt;</text>
+  <rect x="230" y="352" width="250" height="58" rx="8" class="node"/><text x="355" y="375" text-anchor="middle" class="t">λ eventsConsumer</text><text x="355" y="392" text-anchor="middle" class="s">StartExecution evt-&lt;id&gt; · telemetría (respaldo)</text>
   <rect x="520" y="420" width="200" height="26" rx="6" class="q"/><text x="620" y="438" text-anchor="middle" class="xs">DLQ eventos → alarma CloudWatch</text>
 
   <!-- Step Functions -->
@@ -100,14 +100,14 @@
   <rect x="230" y="824" width="250" height="70" rx="8" class="node"/><text x="355" y="846" text-anchor="middle" class="t">Amazon EventBridge</text><text x="355" y="863" text-anchor="middle" class="s">λ simulator cada 1 min (apagable)</text><text x="355" y="879" text-anchor="middle" class="s">λ outboxReconciler cada 5 min</text>
   <rect x="520" y="824" width="410" height="70" rx="8" class="node"/><text x="725" y="846" text-anchor="middle" class="t">Amazon CloudWatch</text><text x="725" y="863" text-anchor="middle" class="s">logs JSON {tipo, log_datos} 14 d · Logs Insights</text><text x="725" y="879" text-anchor="middle" class="s">alarmas: DLQ, errores, API p95 &gt; 2 s, ExecutionsFailed</text>
   <rect x="970" y="824" width="180" height="70" rx="8" class="node"/><text x="1060" y="852" text-anchor="middle" class="t">SNS alertas</text><text x="1060" y="869" text-anchor="middle" class="s">correo del equipo</text>
-  <text x="218" y="966" class="xs">IaC: backend/serverless.yml + infra/aws/*.yml (validada con cfn-lint; adaptada a AWS Academy: sin CloudFront, SES ni X-Ray) · sin EC2 ni clústeres · DynamoDB on-demand + Lambda + SQS + Step Functions escalan a cero en reposo</text>
+  <text x="218" y="966" class="xs">IaC: serverless.yml + infra/aws (cfn-lint) · adaptada a AWS Academy (sin CloudFront, SES ni X-Ray) · sin EC2 ni clústeres · escala a cero en reposo</text>
 
   <!-- GCP -->
   <rect x="1210" y="350" width="370" height="420" rx="14" class="gcp"/>
   <text x="1228" y="374" font-size="15" font-weight="bold" fill="#174ea6">Google Cloud · us-central1</text>
   <rect x="1236" y="392" width="318" height="92" rx="8" class="node"/><text x="1395" y="414" text-anchor="middle" class="t">Workload Identity Federation (AWS)</text><text x="1395" y="431" text-anchor="middle" class="s">Google STS valida GetCallerIdentity firmado (SigV4)</text><text x="1395" y="447" text-anchor="middle" class="s">condición: assumed-role/LabRole de la cuenta</text><text x="1395" y="463" text-anchor="middle" class="s">IAM Credentials → ID token del SA invocador</text><text x="1395" y="478" text-anchor="middle" class="xs">sin claves de cuenta de servicio</text>
   <rect x="1236" y="514" width="318" height="92" rx="8" class="node"/><text x="1395" y="536" text-anchor="middle" class="t">Cloud Run PRIVADO (FastAPI)</text><text x="1395" y="553" text-anchor="middle" class="s">--no-allow-unauthenticated · min 0 / max 2</text><text x="1395" y="569" text-anchor="middle" class="s">verifica invocador · redacta PII · valida JSON</text><text x="1395" y="585" text-anchor="middle" class="s">alternativa HMAC + anti-replay (Secret Manager)</text>
-  <rect x="1236" y="636" width="318" height="92" rx="8" class="node"/><text x="1395" y="658" text-anchor="middle" class="t">Vertex AI · Gemini</text><text x="1395" y="675" text-anchor="middle" class="s">modelo configurable (verificado por región)</text><text x="1395" y="691" text-anchor="middle" class="s">entrada anonimizada · descripciones = datos</text><text x="1395" y="707" text-anchor="middle" class="s">no confiables · salida: resumen, causas,</text><text x="1395" y="722" text-anchor="middle" class="xs">acciones, incertidumbres (la IA no decide)</text>
+  <rect x="1236" y="636" width="318" height="92" rx="8" class="node"/><text x="1395" y="658" text-anchor="middle" class="t">Vertex AI · Gemini</text><text x="1395" y="675" text-anchor="middle" class="s">gemini-3.5-flash-lite · endpoint global</text><text x="1395" y="691" text-anchor="middle" class="s">entrada anonimizada · descripciones = datos</text><text x="1395" y="707" text-anchor="middle" class="s">no confiables · salida: resumen, causas,</text><text x="1395" y="722" text-anchor="middle" class="xs">acciones, incertidumbres (la IA no decide)</text>
 
   <!-- Flechas principales -->
   <path class="e" d="M170,148 H228"/>
@@ -140,6 +140,6 @@
 
   <!-- Leyenda -->
   <rect x="200" y="996" width="1380" height="54" rx="8" fill="#f7f7f5" stroke="#ddd"/>
-  <text x="216" y="1016" font-size="11.5" fill="#222"><tspan font-weight="bold">Flujo:</tspan> reporte o métrica → API → TransactWrite durable (registro + outbox + idempotencia) → Streams → SQS → Step Functions (correlación, incidente único, prioridad, IA en GCP, notificaciones) → SES.</text>
+  <text x="216" y="1016" font-size="11.5" fill="#222"><tspan font-weight="bold">Flujo:</tspan> reporte o métrica → API → TransactWrite durable (registro + outbox + idempotencia) → Streams → SQS → Step Functions (correlación, incidente único, prioridad, IA en GCP) → notificaciones por SNS.</text>
   <text x="216" y="1036" font-size="11.5" fill="#222"><tspan font-weight="bold">Leyenda:</tspan> línea continua = síncrono · discontinua = asíncrono/evento · azul = llamada entre nubes AWS→GCP · rojo = seguridad. Datos sintéticos; alta disponibilidad Multi-AZ de servicios gestionados en una región (sin réplica multirregión).</text>
 </svg>

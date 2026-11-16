@@ -316,3 +316,20 @@ describe('limitador de tasa por IP', () => {
     expect(res.filter((r) => r.status === 'rejected' && (r.reason as { status?: number }).status === 429)).toHaveLength(20);
   });
 });
+
+describe('telemetría: aplicación en línea en orden de llegada', () => {
+  it('ráfaga de lecturas de recurrencia (como el escenario en la nube) => 3 episodios aunque la cola reordene', async () => {
+    env = newEnv();
+    // La cola local procesa en paralelo (concurrencia 8): sin aplicación en línea podría reordenar.
+    const seq = [30, 100, 100, 100, 0, 100, 100, 100, 150, 100, 100, 100];
+    const base = Date.now() - 60_000;
+    for (let i = 0; i < seq.length; i++) {
+      await ingestTelemetry({ eventId: `rcr-ANT-MIR-02-${base}-${i}`, antennaId: 'ANT-MIR-02', zoneId: 'Z-MIR', gbPerMinute: seq[i], observedAt: new Date(base + (i + 1) * 2000).toISOString() });
+    }
+    await env.idle();
+    const ant = (await listAntennas()).find((a) => a.antennaId === 'ANT-MIR-02')!;
+    expect(ant.recurrence.episodesInWindow).toBe(3);
+    expect(ant.recurrence.structuralReview).toBe(true);
+    expect(ant.lateReadings).toBe(0);
+  });
+});
